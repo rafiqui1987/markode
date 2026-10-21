@@ -5,12 +5,13 @@ import { watch } from 'chokidar'
 import open from 'open'
 import pc from 'picocolors'
 import { WebSocketServer } from 'ws'
-import { isLang, type Lang, readConfig, readSettings, safeResolve, stateDir, toPosix, WEB_DIR, writeConfig, writeSettings } from '../core/config.js'
+import { isLang, isLangCode, type Lang, langName, readConfig, readSettings, safeResolve, stateDir, toPosix, WEB_DIR, writeConfig, writeSettings } from '../core/config.js'
 import { summarize } from '../core/dashboard.js'
 import { gitDiff, gitStatuses, isGitRepo } from '../core/git.js'
 import { allStatuses, fileStatus, foreignFiles, keepLanguage, translationPath } from '../core/i18n.js'
 import { appliedRuleIds, applyRulesToFile, deleteRule, listRules, projectSourceLang, saveRule } from '../core/rules.js'
 import { scanTree, setIgnored, watchSkips } from '../core/scan.js'
+import { activateProposals, authorName, deactivateProposals, proposalsState } from '../core/proposals.js'
 import { sddPrefixes, summarizeSdd } from '../core/sdd.js'
 import { getSkill, installSkill, listSkills, PROJECT_TARGETS, type ProjectTarget, projectTargets, setSkillTags, skillSources } from '../core/skills.js'
 
@@ -77,10 +78,10 @@ function isLocalRequest(req: http.IncomingMessage): boolean {
 }
 
 export async function startServer({ root, port, open: openBrowser }: Options) {
-  const config = () => readConfig(root) ?? { mainDoc: null, langs: [] as Lang[] }
+  const config = () => readConfig(root) ?? { mainDoc: null, langs: [] as string[] }
   const sourceLang = () => projectSourceLang(root, readConfig(root)?.mainDoc)
   /** The translation language a request asks for, or null when it wants the source files. */
-  const viewLang = (value: unknown): Lang | null => (isLang(value) && value !== sourceLang() && config().langs.includes(value) ? value : null)
+  const viewLang = (value: unknown): string | null => (isLangCode(value) && value !== sourceLang() && config().langs.includes(value) ? value : null)
 
   const mdPath = (rel: unknown) => {
     if (typeof rel !== 'string' || !rel.toLowerCase().endsWith('.md')) throw new HttpError(400, 'Expected a .md path')
@@ -100,11 +101,20 @@ export async function startServer({ root, port, open: openBrowser }: Options) {
   const routes: Record<string, (url: URL, body: any) => unknown> = {
     'GET /api/info': () => {
       const c = config()
-      return { name: path.basename(root), mainDoc: c.mainDoc ?? null, sourceLang: sourceLang(), langs: c.langs.filter((l) => l !== sourceLang()), git: isGitRepo(root) }
+      return {
+        name: path.basename(root),
+        mainDoc: c.mainDoc ?? null,
+        sourceLang: sourceLang(),
+        langs: c.langs.filter((l) => l !== sourceLang()),
+        langNames: Object.fromEntries(c.langs.map((l) => [l, langName(l, c)])),
+        git: isGitRepo(root),
+        proposals: proposalsState(root),
+        author: authorName(root),
+      }
     },
     'PUT /api/config': (_, body) => {
       const c = config()
-      if (Array.isArray(body.langs)) c.langs = body.langs.filter(isLang)
+      if (Array.isArray(body.langs)) c.langs = body.langs.filter(isLangCode)
       if (isLang(body.sourceLang) && body.sourceLang !== sourceLang()) {
         if (!c.mainDoc) throw new HttpError(400, 'No main document configured; run `mdrules init`')
         applyRulesToFile(path.join(root, c.mainDoc), undefined, body.sourceLang)
@@ -112,6 +122,11 @@ export async function startServer({ root, port, open: openBrowser }: Options) {
       // Kept as chosen; the source language is filtered out wherever it is read.
       writeConfig(root, c)
       return { ...c, langs: c.langs.filter((l) => l !== sourceLang()) }
+    },
+    'PUT /api/proposals': (_, body) => {
+      if (body.active) activateProposals(root, body.layout === 'structured' ? 'structured' : 'general', config().mainDoc)
+      else deactivateProposals(root, config().mainDoc)
+      return proposalsState(root)
     },
     'GET /api/settings': () => readSettings(),
     'PUT /api/settings': (_, body) => writeSettings(body),

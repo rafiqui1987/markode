@@ -1,7 +1,8 @@
 import { syntaxTree } from '@codemirror/language'
 import { type EditorState, Prec, StateEffect, StateField } from '@codemirror/state'
 import { EditorView, keymap, showTooltip, type Tooltip, ViewPlugin, type ViewUpdate } from '@codemirror/view'
-import { Bold, Check, Code, createElement, type IconNode, Italic, Link, RemoveFormatting, Strikethrough } from 'lucide'
+import { Bold, Check, Code, createElement, type IconNode, Italic, Link, MessageSquarePlus, RemoveFormatting, Strikethrough } from 'lucide'
+import { addComment, commentAuthor } from './comments'
 import type { T, TKey } from '../i18n'
 
 type Format = 'bold' | 'italic' | 'strike' | 'code' | 'link'
@@ -219,6 +220,16 @@ function barTooltip(state: EditorState, target: Target, translate: T): Tooltip {
         dom.append(group)
       }
       if (target.formatted) button(dom, RemoveFormatting, () => apply(view, targetOf(view.state)!, null), translate('format.plain'))
+      if (state.facet(commentAuthor))
+        button(
+          dom,
+          MessageSquarePlus,
+          () => {
+            view.dispatch({ effects: showBar.of(false) })
+            addComment(view)
+          },
+          translate('format.comment'),
+        )
       if (navigator.clipboard) {
         const copied = document.createElement('span')
         copied.className = 'cm-format-copied'

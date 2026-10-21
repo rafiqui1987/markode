@@ -1,8 +1,8 @@
 import { ChevronRight, FileText, GitCompare, LayoutDashboard, Moon, PanelLeftClose, PanelLeftOpen, Redo2, RotateCcw, ScrollText, Settings as SettingsIcon, Sparkles, Sun, Undo2 } from 'lucide-react'
 import { type CSSProperties, type PointerEvent as ReactPointerEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { api, type EditorSettings, type FileData, type Info, type Lang, LANG_NAMES, type SyncStatus, subscribe, type TreeData, type TreeNode } from './api'
+import { api, type EditorSettings, type ProposalLayout, type FileData, type Info, type Lang, LANG_NAMES, type SyncStatus, subscribe, type TreeData, type TreeNode } from './api'
 import { type EditHistory, Editor, type EditorCommands, NO_HISTORY } from './components/Editor'
-import { Changes, Dashboard, Rules, StatusChip } from './components/Pages'
+import { Changes, Dashboard, ProposalBanner, Rules, StatusChip } from './components/Pages'
 import { applySettings, DEFAULT_SETTINGS, Settings } from './components/Settings'
 import { Sidebar } from './components/Sidebar'
 import { Skills } from './components/Skills'
@@ -47,9 +47,25 @@ const SIDEBAR_DEFAULT = 260
 const SIDEBAR_MIN = 180
 const sidebarMax = () => Math.max(SIDEBAR_MIN, Math.min(640, window.innerWidth * 0.6))
 
-const statusOf = (content: string) => {
+/** A simple frontmatter field (`status`, `type`…) of a doc's content. */
+const fieldOf = (content: string, key: string) => {
   const fm = /^---\r?\n([\s\S]*?)\r?\n---/.exec(content)?.[1] ?? ''
-  return /^status:\s*([\w-]+)/m.exec(fm)?.[1] ?? null
+  return new RegExp(`^${key}:\\s*([\\w-]+)`, 'm').exec(fm)?.[1] ?? null
+}
+const statusOf = (content: string) => fieldOf(content, 'status')
+/** A proposal's `affects: [a, b]` (inline list): the docs its decision will change. */
+const affectsOf = (content: string) => {
+  const fm = /^---\r?\n([\s\S]*?)\r?\n---/.exec(content)?.[1] ?? ''
+  const list = /^affects:\s*\[(.*)\]/m.exec(fm)?.[1] ?? ''
+  return list
+    .split(',')
+    .map((s) => s.trim().replace(/^["']|["']$/g, ''))
+    .filter(Boolean)
+}
+
+const today = () => {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 export function App() {
@@ -68,16 +84,19 @@ export function App() {
   const [fileTick, setFileTick] = useState(0)
   const [settings, setSettings] = useState<EditorSettings>(DEFAULT_SETTINGS)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  /** Set once the user sends their answer to a proposal, until another file opens. */
+  const [answered, setAnswered] = useState<string | null>(null)
   const [editHistory, setEditHistory] = useState<EditHistory>(NO_HISTORY)
   const editorCommands = useRef<EditorCommands | null>(null)
   const [sidebarWidth, setSidebarWidth] = useState(() => Number(store.get('mdrules.sidebarWidth')) || SIDEBAR_DEFAULT)
   const [sidebarHidden, setSidebarHidden] = useState(() => store.get('mdrules.sidebarHidden') === '1')
-  const [storedLang, setStoredLang] = useState<Lang | null>(() => store.get('mdrules.viewLang') as Lang | null)
+  const [storedLang, setStoredLang] = useState<string | null>(() => store.get('mdrules.viewLang'))
   const resolvedTheme = useResolvedTheme(theme)
 
   // The language being viewed: the source one, or an enabled translation. It also drives the UI language.
   const sourceLang = info?.sourceLang ?? 'en'
-  const viewLang: Lang = storedLang && info?.langs.includes(storedLang) ? storedLang : sourceLang
+  const viewLang: string = storedLang && info?.langs.includes(storedLang) ? storedLang : sourceLang
+  const nameOf = (code: string) => info?.langNames[code] ?? LANG_NAMES[code as Lang] ?? code
   const t = useMemo(() => makeT(viewLang), [viewLang])
   const viewLangRef = useRef(viewLang)
   viewLangRef.current = viewLang
@@ -172,12 +191,26 @@ export function App() {
     setView('editor')
   }
 
-  const setLang = (lang: Lang) => {
+  const setLang = (lang: string) => {
     setStoredLang(lang)
     store.set('mdrules.viewLang', lang)
   }
 
-  const changeLanguages = async (c: { sourceLang?: Lang; langs?: Lang[] }) => {
+  const changeProposals = async (active: boolean, layout: ProposalLayout) => {
+    await api.setProposals(active, layout).catch((e) => alert(e.message))
+    setInfo(await api.info())
+  }
+
+  // Answering a proposal: mark it answered and copy a message for the AI chat.
+  const sendAnswer = () => {
+    if (!selected) return
+    editorCommands.current?.setField('status', 'answered')
+    editorCommands.current?.setField('updated', today())
+    navigator.clipboard?.writeText(t('proposal.message', { path: selected })).catch(() => {})
+    setAnswered(selected)
+  }
+
+  const changeLanguages = async (c: { sourceLang?: Lang; langs?: string[] }) => {
     await api.setConfig(c).catch((e) => alert(e.message))
     setInfo(await api.info())
   }
@@ -210,6 +243,7 @@ export function App() {
   const pendingCount = Object.values(data.sync).filter((s) => s === 'pending-sync' || s === 'conflict').length
   const status: SyncStatus | null = file?.status ?? null
   const crumbs = selected?.split('/') ?? []
+  const commentAs = info?.proposals.active ? (info.author ?? t('comment.me')) : null
   const layoutKey = `${settings.font}|${settings.size}|${settings.lineHeight}|${settings.padding}|${settings.width}`
 
   const ThemeIcon = resolvedTheme === 'light' ? Sun : Moon
@@ -241,13 +275,13 @@ export function App() {
         <div className="spacer" />
         {pendingCount > 0 && <span className="pill warn">{t('sync.pendingCount', { n: pendingCount })}</span>}
         {info && info.langs.length > 0 && (
-          <select className="control" title={t('app.language')} value={viewLang} onChange={(e) => setLang(e.target.value as Lang)}>
+          <select className="control" title={t('app.language')} value={viewLang} onChange={(e) => setLang(e.target.value)}>
             <option value={sourceLang}>
               {LANG_NAMES[sourceLang]} ({t('lang.original')})
             </option>
             {info.langs.map((l) => (
               <option key={l} value={l}>
-                {LANG_NAMES[l]}
+                {nameOf(l)}
               </option>
             ))}
           </select>
@@ -306,6 +340,9 @@ export function App() {
                 {file && <span className="status"><StatusChip status={statusOf(file.content)} t={t} /></span>}
                 <span className="save">{saving ? t('app.saving') : file ? t('app.saved') : ''}</span>
               </div>
+              {file && fieldOf(file.content, 'type') === 'proposal' && (
+                <ProposalBanner status={statusOf(file.content) !== 'applied' && answered === selected ? 'answered' : statusOf(file.content)} copied={answered === selected} affects={affectsOf(file.content)} t={t} onSend={sendAnswer} onOpen={open} />
+              )}
               {viewLang !== sourceLang && status && status !== 'synced' && (
                 <div className={`banner sync-${status}`}>
                   <span className={`dot sync-${status}`} /> {t(`sync.${status}`)} · {t('sync.hint')}
@@ -326,7 +363,7 @@ export function App() {
                 </div>
               )}
               <Editor
-                key={`${selected}|${viewLang}`}
+                key={`${selected}|${viewLang}|${commentAs}`}
                 path={selected}
                 lang={viewLang}
                 layoutKey={layoutKey}
@@ -337,6 +374,7 @@ export function App() {
                 onLoaded={setFile}
                 onHistory={setEditHistory}
                 commands={editorCommands}
+                author={commentAs}
                 onSaving={setSaving}
                 onSaved={(s) => {
                   setFile((f) => (f ? { ...f, status: s } : f))
@@ -347,13 +385,13 @@ export function App() {
           ) : (
             <div className="empty">{t('app.noFile')}</div>
           ))}
-        {view === 'dashboard' && <Dashboard t={t} tick={tick} onOpen={open} />}
+        {view === 'dashboard' && <Dashboard t={t} tick={tick} onOpen={open} proposalsActive={!!info?.proposals.active} onActivateProposals={() => setSettingsOpen(true)} />}
         {view === 'changes' && <Changes t={t} git={data.git} enabled={!!info?.git} tick={tick} />}
         {view === 'rules' && <Rules t={t} />}
         {view === 'skills' && <Skills t={t} tick={tick} look={{ layoutKey, wrap: settings.wrap, theme: resolvedTheme }} />}
       </main>
 
-      {settingsOpen && info && <Settings t={t} info={info} settings={settings} onSettings={changeSettings} onLanguages={changeLanguages} onClose={() => setSettingsOpen(false)} />}
+      {settingsOpen && info && <Settings t={t} info={info} settings={settings} onSettings={changeSettings} onLanguages={changeLanguages} onProposals={changeProposals} onClose={() => setSettingsOpen(false)} />}
     </div>
   )
 }

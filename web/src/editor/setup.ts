@@ -9,7 +9,8 @@ import { tags as t } from '@lezer/highlight'
 import type { T } from '../i18n'
 import { Footnotes, MathSyntax } from './extraSyntax'
 import { Frontmatter } from './frontmatter'
-import { docPath, livePreview } from './livePreview'
+import { commentAuthor } from './comments'
+import { docPath, livePreview, translator } from './livePreview'
 import { formatBar } from './formatBar'
 import { pasteTable } from './pasteTable'
 import { slashMenu } from './slashMenu'
@@ -64,7 +65,8 @@ const theme = EditorView.theme({
 /** Holds `EditorView.lineWrapping`, so the setting can change without rebuilding the editor. */
 export const wrapping = new Compartment()
 
-export function editorExtensions(translate: T, path: string, wrap: boolean, onChange: (text: string) => void): Extension[] {
+/** `author` signs new comments; null when proposals and comments are off for the project. */
+export function editorExtensions(translate: T, path: string, wrap: boolean, author: string | null, onChange: (text: string) => void): Extension[] {
   setWidgetTranslate(translate)
   return [
     history(),
@@ -76,6 +78,8 @@ export function editorExtensions(translate: T, path: string, wrap: boolean, onCh
     syntaxHighlighting(highlight),
     theme,
     docPath.of(path),
+    translator.of(translate),
+    commentAuthor.of(author),
     livePreview,
     slashMenu(translate),
     taskHint(translate),

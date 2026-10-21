@@ -13,7 +13,7 @@ diffs stay clean and AI agents keep reading plain Markdown.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/screenshot-dark.png">
-  <img alt="mdrules editor: file tree, a phase doc with checklists, an editable table, a Mermaid diagram and KaTeX math" src="docs/assets/screenshot-light.png">
+  <img alt="mdrules editor: file tree of a project using the mdrules method, a phase with its tasks, a comment thread like in Word and a Mermaid diagram" src="docs/assets/screenshot-light.png">
 </picture>
 
 ## Quick start
@@ -24,8 +24,8 @@ Requires Node.js 20 or newer. From the root of any project (monorepos included):
 npx mdrules
 ```
 
-The first run asks a few questions (main doc, a structure for specs, rules, languages) and opens the
-editor at `http://localhost:4319`. It only listens on `127.0.0.1`.
+The first run asks a few questions (main doc, how to plan the work, the language you work in, rules)
+and opens the editor at `http://localhost:4319`. It only listens on `127.0.0.1`.
 
 ## What it does
 
@@ -60,23 +60,112 @@ Undo, redo and **discard** (back to how the file was when you opened it) sit nex
 - And more: KaTeX math (`$x^2$`, `$$…$$`), footnotes on hover, local and remote images, code blocks with
   only their language label showing.
 
-### 5. Plan your project with specs
+### 5. Work in your language
 
-`mdrules init` can set up a structure for specs and planning, which the **Dashboard** then shows with
-its progress:
+Most AI agents, and most teams, work best with docs in English. If English isn't easy for you, you
+don't have to choose:
+
+- Run `mdrules translate` and pick a language to review the docs in: Spanish, French, Portuguese,
+  German or Italian, or **type any other** (Japanese, Dutch…). mdrules then shows **every doc in that
+  language**, and the interface too for the built-in ones (menus stay in English for the others).
+  Read the architecture, tick tasks, write notes and fix a rule, all in your language.
+- The files in the repository **stay in one source language** (English by default), so the agent and
+  the rest of the team keep reading one consistent version.
+- Your edits are kept as a translation until you ask the agent for `/mdrules sync`: it applies them
+  to the source file and refreshes every translation. The sidebar marks which docs are pending.
+
+Example: you open `docs/tasks/T-004-login.md` in Spanish, add an acceptance criterion and tick two
+others. After `/mdrules sync`, the English file has the new criterion and the ticks, and the agent
+works from it.
+
+### 6. A method to plan and follow the work
+
+`mdrules init` offers the **mdrules method**, a way of organizing the project so that you and the
+agent always know what is being built, how, and what comes next:
+
+```tree
+CLAUDE.md                  # short: map, commands, how to start and close a session
+docs/
+  README.md                # how the method works
+  vision.md                # what the project is, for whom, what is out of scope
+  architecture/            # technology and design decisions, one file per topic
+  phases/01-foundations.md # a construction phase: goal, its tasks, definition of done
+  TASKS.md                 # index: in progress, blocked, pending, done
+  tasks/T-001-....md       # one file per task: goal, acceptance checklist, next step, log
+```
+
+```mermaid
+flowchart LR
+  V[Vision] --> A[Architecture] --> P[Phase] --> T[Tasks] --> W[Work] --> C[Close the session]
+  C -->|next step| W
+  C -->|phase done| P
+```
+
+- **The main doc stays short** and points to `docs/`. If `CLAUDE.md` or `AGENTS.md` already exist,
+  they are not rewritten: mdrules adds a "Workflow" section with the map and the session routine.
+- **Each fact lives in one place**: decisions in `architecture/`, progress in the task files.
+- **Sessions pick up where they stopped**: the agent looks for tasks `in-progress`, reads their "Next
+  step" and tells you where you left off. `/mdrules-new-task` creates a task in the right place, and
+  `/mdrules-close-session` logs what was done, the next step and the status.
+- **Monorepos**: each area (`apps/`, `services/`…) gets its own short `CLAUDE.md`, `docs/ARCHITECTURE.md`
+  and tasks with its own prefix (`APP-001`, `SVC-001`); the root `docs/` holds vision, phases and
+  cross-area tasks (`CORE-001`). The agent reads only the area it is working on.
+- **The Dashboard** shows each phase with its progress and tasks, and a board of what is in progress,
+  blocked and pending.
+
+**Prefer spec-driven development?** Pick one of these instead, and the Dashboard follows it too:
 
 | Option | What you get |
 |---|---|
-| **mdrules** | `docs/` with phases, tasks, decisions, rules and architecture, with examples and a guide |
 | **[OpenSpec](https://github.com/Fission-AI/OpenSpec)** | `openspec/` with specs and proposed changes; the dashboard shows each change and its tasks |
 | **[GitHub Spec Kit](https://github.com/github/spec-kit)** | a constitution and one folder per feature (spec → plan → tasks); the dashboard shows what each has |
 
-For OpenSpec and Spec Kit, mdrules runs their official installer, which also adds their commands to
-your AI agent (`/opsx:*`, `/speckit-*`). If it can't (Spec Kit needs [uv](https://docs.astral.sh/uv/)),
-it creates a compatible structure with a guide on how to add them later. Projects that already use
-either are detected and shown as they are.
+mdrules runs their official installer, which also adds their commands to your agent (`/opsx:*`,
+`/speckit-*`). If it can't (Spec Kit needs [uv](https://docs.astral.sh/uv/)), it creates a compatible
+structure with a guide on how to add them later. Projects that already use either are detected and
+shown as they are. Choose **None** and mdrules adds no structure or workflow at all.
 
-### 6. Your AI agent's skills
+### 7. Proposals and comments: answer the AI with clicks
+
+When an answer would be long or has options to choose from (or when you ask for one), the agent writes
+a **proposal** instead of a long chat message: options with small ASCII or Mermaid diagrams, choices to
+tick, open questions, and the docs the decision will change. You answer in mdrules:
+
+```text
+ ┌ Proposal: Authentication ─────────────────────────────┐
+ │  Option A (recommended)                               │
+ │   Browser ──REST──▶ Gateway ──gRPC──▶ Users ──▶ (DB)  │
+ │                                                       │
+ │  Your choice                                          │
+ │   (•) A: gateway validates                            │
+ │   ( ) B: each service validates                       │
+ │                                                       │
+ │  [ Done, send my answer ]                             │
+ └───────────────────────────────────────────────────────┘
+```
+
+- **Tick options**: a list marked `<!-- choose: one -->` behaves like radio buttons; any other
+  checklist allows several.
+- **Comment like in Word**: select text and press 💬. The text is highlighted and the thread shows next
+  to it, with replies and a button to resolve it. In the file, a comment is an HTML comment, invisible
+  on GitHub and readable by the agent:
+
+  ```md
+  - [x] A: gateway validates
+    <!-- comment by Ana, 2026-10-22, on "gateway validates": What if it goes down? -->
+    <!-- reply by AI, 2026-10-22: Two instances minimum; added to the architecture. -->
+  ```
+
+- **Send your answer**: the button marks the proposal as answered and copies a message to paste in your
+  AI chat. The agent replies to your comments and updates every doc that depends on the decision
+  (tasks, phases, architecture…). A proposal is temporary: once applied, it is deleted and the decision
+  lives in those docs.
+- In big projects, proposals can be organized **by topic and area** (`docs/proposals/auth/…`,
+  `services/docs/proposals/…`) instead of one folder.
+
+It comes with the mdrules method, and can be turned on or off for any project in **Settings**.
+
+### 8. Your AI agent's skills
 
 The **Skills** tab lists every global skill you have for Claude Code, Codex, Gemini, Copilot or Cursor
 ([Agent Skills](https://agentskills.io) format). Tag them to group them, expand one to read or edit its
@@ -84,13 +173,10 @@ The **Skills** tab lists every global skill you have for Claude Code, Codex, Gem
 (`.claude/skills/` and/or `.agents/skills/`). Tags are stored in `~/.mdrules/skills.json`, never in the
 skill.
 
-### 7. Also included
+### 9. Also included
 
 - **Changes**: Git diff of your Markdown, grouped by folder and section.
 - **Rules**: reusable rule presets (e.g. "ask before committing") written into `CLAUDE.md` or `AGENTS.md`.
-- **Languages**: view and edit docs in English, Spanish, French, Portuguese, German or Italian while
-  the files stay in one source language; the AI applies your edits with `/mdrules sync`. The interface
-  is translated too.
 - **Settings**: font, size, line spacing, margins, line width and wrapping; light and dark themes.
 
 ## Keyboard shortcuts
@@ -111,6 +197,7 @@ mdrules                     # set up the project if needed, then open the editor
 mdrules init                # run the setup again
 mdrules serve               # open the editor without the setup
 mdrules serve --port 5000 --no-open
+mdrules translate           # choose languages to review the docs in (also: mdrules --translate)
 ```
 
 To keep it installed: `npm install -g mdrules` (or `pnpm add -g mdrules`).
@@ -121,8 +208,11 @@ To keep it installed: `npm install -g mdrules` (or `pnpm add -g mdrules`).
 that mdrules presents well and how to keep translations in sync. It also writes into the main doc:
 
 - the working rules you picked, between `<!-- mdrules:rules:start -->` and `<!-- mdrules:rules:end -->`;
-- how the project plans its work (mdrules, OpenSpec or Spec Kit), between
-  `<!-- mdrules:workflow:start -->` and `<!-- mdrules:workflow:end -->`.
+- how the project plans its work (the mdrules method, OpenSpec or Spec Kit), between
+  `<!-- mdrules:workflow:start -->` and `<!-- mdrules:workflow:end -->`. With the mdrules method it
+  also installs the `mdrules-new-task` and `mdrules-close-session` skills.
+- with proposals on, how the agent writes proposals and answers comments (skill
+  `mdrules-proposals`), between `<!-- mdrules:proposals:start -->` and `<!-- mdrules:proposals:end -->`.
 
 ```bash
 mdrules sync --status [--json]                   # translations + files not in the source language
@@ -136,8 +226,8 @@ mdrules sync --keep <path...>                    # keep files in their current l
 npm uninstall -g mdrules    # or: pnpm remove -g mdrules (use the one you installed it with)
 ```
 
-To remove it from a project, delete `.mdrules/` and `.claude/skills/mdrules/`, the `.mdrules/` line in
-`.gitignore`, and the `mdrules:rules` and `mdrules:workflow` blocks in your main doc (keep the text
+To remove it from a project, delete `.mdrules/` and `.claude/skills/mdrules*/`, the `.mdrules/` line in
+`.gitignore`, and the `mdrules:rules`, `mdrules:workflow` and `mdrules:proposals` blocks in your main doc (keep the text
 inside if you still want it). Editor settings, rule presets and skill tags live in `~/.mdrules`.
 
 ## Development

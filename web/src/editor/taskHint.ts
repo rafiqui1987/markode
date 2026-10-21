@@ -1,6 +1,7 @@
 import { Prec, StateField } from '@codemirror/state'
 import { EditorView, keymap, showTooltip, type Tooltip } from '@codemirror/view'
 import type { T } from '../i18n'
+import { toggleTaskAt } from './comments'
 
 const TASK = /^(\s*(?:[-*+]|\d+[.)]) \[)([ xX])\]/
 const EMPTY_TASK = /^\s*(?:[-*+]|\d+[.)]) \[ \] $/
@@ -11,9 +12,7 @@ function toggleTask(view: EditorView) {
   const line = view.state.doc.lineAt(view.state.selection.main.head)
   const m = TASK.exec(line.text)
   if (!m) return false
-  const at = line.from + m[1].length
-  view.dispatch({ changes: { from: at, to: at + 1, insert: m[2] === ' ' ? 'x' : ' ' } })
-  return true
+  return toggleTaskAt(view, line.from + m[1].length - 1)
 }
 
 /**

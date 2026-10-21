@@ -26,10 +26,18 @@ export interface Info {
   name: string
   mainDoc: string | null
   sourceLang: Lang
-  /** Enabled translation languages (never includes the source one). */
-  langs: Lang[]
+  /** Enabled translation languages (never includes the source one): built-in codes or ones added by hand. */
+  langs: string[]
+  /** Display name of every enabled language code. */
+  langNames: Record<string, string>
   git: boolean
+  /** Proposals and comments: on when the project has the mdrules-proposals skill. */
+  proposals: { active: boolean; layout: ProposalLayout }
+  /** Signs comments (git user.name); null when unknown. */
+  author: string | null
 }
+
+export type ProposalLayout = 'general' | 'structured'
 
 export interface TreeData {
   tree: TreeNode[]
@@ -53,6 +61,8 @@ export interface DocSummary {
   status: string | null
   phase: number | null
   updated: string | null
+  id: string | null
+  area: string | null
   tasks: { done: number; total: number }
 }
 
@@ -119,13 +129,14 @@ const q = encodeURIComponent
 
 export const api = {
   info: () => call<Info>('GET', '/api/info'),
-  setConfig: (config: { langs?: Lang[]; sourceLang?: Lang }) => call('PUT', '/api/config', config),
+  setProposals: (active: boolean, layout: ProposalLayout) => call<Info['proposals']>('PUT', '/api/proposals', { active, layout }),
+  setConfig: (config: { langs?: string[]; sourceLang?: Lang }) => call('PUT', '/api/config', config),
   settings: () => call<EditorSettings>('GET', '/api/settings'),
   saveSettings: (s: Partial<EditorSettings>) => call<EditorSettings>('PUT', '/api/settings', s),
   keepLanguage: (path: string) => call('POST', '/api/keep-language', { path }),
-  tree: (lang: Lang) => call<TreeData>('GET', `/api/tree?lang=${lang}`),
-  file: (path: string, lang: Lang) => call<FileData>('GET', `/api/file?path=${q(path)}&lang=${lang}`),
-  save: (path: string, content: string, target: FileData['target'], lang: Lang) => call<{ status: SyncStatus | null }>('PUT', '/api/file', { path, content, target, lang }),
+  tree: (lang: string) => call<TreeData>('GET', `/api/tree?lang=${lang}`),
+  file: (path: string, lang: string) => call<FileData>('GET', `/api/file?path=${q(path)}&lang=${lang}`),
+  save: (path: string, content: string, target: FileData['target'], lang: string) => call<{ status: SyncStatus | null }>('PUT', '/api/file', { path, content, target, lang }),
   create: (path: string) => call<{ path: string }>('POST', '/api/file', { path }),
   createDir: (path: string) => call<{ path: string }>('POST', '/api/dir', { path }),
   deletePreview: (path: string) => call<{ kind: TreeNode['kind']; files: number; md: number }>('GET', `/api/delete-preview?path=${q(path)}`),

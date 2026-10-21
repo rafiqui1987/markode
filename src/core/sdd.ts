@@ -85,19 +85,9 @@ const today = () => new Date().toISOString().slice(0, 10)
 
 // ------------------------------------------------------------ main doc block
 
-const START = '<!-- mdrules:workflow:start -->'
-const END = '<!-- mdrules:workflow:end -->'
 
-const WORKFLOW_TEXT: Record<Exclude<Workflow, 'none'>, string> = {
-  mdrules: [
-    '## Workflow',
-    '',
-    'Planning lives in `docs/` (guide: `docs/README.md`):',
-    '',
-    '- One file per phase in `docs/phases/NN-name.md` (`type: phase`), with its goal and tasks.',
-    '- Ongoing tasks in `docs/tasks.md`, decisions in `docs/decisions.md`, rules in `docs/rules.md`.',
-    '- Keep `status` and `updated` in each doc current, and tick tasks as you finish them.',
-  ].join('\n'),
+/** Fixed sections; the mdrules method builds its own (see core/method.ts). */
+const WORKFLOW_TEXT: Record<'openspec' | 'speckit', string> = {
   openspec: [
     '## Workflow',
     '',
@@ -120,17 +110,30 @@ const WORKFLOW_TEXT: Record<Exclude<Workflow, 'none'>, string> = {
 }
 
 /** Write (or remove, for 'none') the workflow section of the main doc; the rest of the doc is untouched. */
-export function applyWorkflowToFile(file: string, workflow: Workflow) {
+export function applyWorkflowToFile(file: string, workflow: Workflow, text?: string) {
+  writeManagedBlock(file, workflow === 'none' ? null : (text ?? (workflow === 'mdrules' ? null : WORKFLOW_TEXT[workflow])))
+}
+
+/**
+ * Replace the `mdrules:<name>` block of a doc (`workflow` by default), add it (at the end, or right after the title with `top`),
+ * or remove it when `body` is null.
+ */
+export function writeManagedBlock(file: string, body: string | null, top = false, name = 'workflow') {
+  const START = `<!-- mdrules:${name}:start -->`
+  const END = `<!-- mdrules:${name}:end -->`
   const text = fs.readFileSync(file, 'utf8')
   const s = text.indexOf(START)
   const e = text.indexOf(END)
   const existing = s >= 0 && e > s ? text.slice(s, e + END.length) : null
-  if (workflow === 'none') {
+  if (body === null) {
     if (existing) fs.writeFileSync(file, text.replace(new RegExp(`\\n*${escapeRe(existing)}\\n?`), '\n'))
     return
   }
-  const section = `${START}\n${WORKFLOW_TEXT[workflow]}\n${END}`
-  fs.writeFileSync(file, existing ? text.replace(existing, section) : text.replace(/\s*$/, '') + '\n\n' + section + '\n')
+  const section = `${START}\n${body}\n${END}`
+  if (existing) return fs.writeFileSync(file, text.replace(existing, section))
+  const title = top ? /^# .*\n/m.exec(text) : null
+  if (title) return fs.writeFileSync(file, text.slice(0, title.index + title[0].length) + '\n' + section + '\n' + text.slice(title.index + title[0].length))
+  fs.writeFileSync(file, text.replace(/\s*$/, '') + '\n\n' + section + '\n')
 }
 
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')

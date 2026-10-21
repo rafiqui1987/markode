@@ -2,7 +2,7 @@ import { isolateHistory, redo, redoDepth, undo, undoDepth } from '@codemirror/co
 import { ChangeSet, EditorState, Transaction } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 import { type MutableRefObject, useEffect, useRef } from 'react'
-import { api, type FileData, type Lang, type SyncStatus } from '../api'
+import { api, type FileData, type SyncStatus } from '../api'
 import { setTheme } from '../editor/livePreview'
 import { editorExtensions, externalChange, wrapping } from '../editor/setup'
 import type { Theme } from '../editor/widgets'
@@ -11,7 +11,7 @@ import type { T } from '../i18n'
 interface Props {
   path: string
   /** Language being viewed: the source one or a translation. */
-  lang: Lang
+  lang: string
   t: T
   /** Changes when font/size/spacing change, so the editor re-measures its lines. */
   layoutKey: string
@@ -30,6 +30,8 @@ interface Props {
   io?: { load: () => Promise<FileData>; save: (text: string) => Promise<{ status: SyncStatus | null }> }
   /** Shown but never changed, not even by widgets such as checkboxes or tables. */
   readOnly?: boolean
+  /** Signs new comments; null or missing turns comment creation off. */
+  author?: string | null
 }
 
 export interface EditHistory {
@@ -42,6 +44,18 @@ export interface EditorCommands {
   undo: () => void
   redo: () => void
   discard: () => void
+  /** Set a frontmatter field (e.g. a proposal's status), as one undoable change. */
+  setField: (key: string, value: string) => void
+}
+
+/** The change that sets `key: value` in the doc's frontmatter, or null if it has none. */
+function fieldChange(text: string, key: string, value: string) {
+  const fm = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text)
+  if (!fm) return null
+  const line = new RegExp(`^${key}:.*$`, 'm').exec(fm[1])
+  const start = fm[0].indexOf(fm[1])
+  if (line) return { from: start + line.index, to: start + line.index + line[0].length, insert: `${key}: ${value}` }
+  return { from: start + fm[1].length, insert: `\n${key}: ${value}` }
 }
 
 export const NO_HISTORY: EditHistory = { undo: 0, redo: 0, dirty: false }
@@ -59,7 +73,7 @@ function revertChanges(state: EditorState): ChangeSet {
   return changes
 }
 
-export function Editor({ path, lang, t, layoutKey, wrap, theme, externalTick, onLoaded, onSaving, onSaved, onHistory, commands, io, readOnly }: Props) {
+export function Editor({ path, lang, t, layoutKey, wrap, theme, externalTick, onLoaded, onSaving, onSaved, onHistory, commands, io, readOnly, author = null }: Props) {
   const host = useRef<HTMLDivElement>(null)
   const view = useRef<EditorView | null>(null)
   const file = useRef<FileData | null>(null)
@@ -106,7 +120,7 @@ export function Editor({ path, lang, t, layoutKey, wrap, theme, externalTick, on
         state: EditorState.create({
           doc: data.content,
           extensions: [
-            editorExtensions(t, path, wrap, (text) => {
+            editorExtensions(t, path, wrap, readOnly ? null : author, (text) => {
               pending.current = text
               editSeq.current++
               callbacks.current.onSaving(true)
@@ -126,6 +140,10 @@ export function Editor({ path, lang, t, layoutKey, wrap, theme, externalTick, on
         discard: () => {
           const changes = revertChanges(v.state)
           if (!changes.empty) v.dispatch({ changes, annotations: isolateHistory.of('full'), scrollIntoView: true })
+        },
+        setField: (key, value) => {
+          const change = fieldChange(v.state.doc.toString(), key, value)
+          if (change) v.dispatch({ changes: change, annotations: isolateHistory.of('full') })
         },
       }
     })

@@ -54,6 +54,8 @@
   --git-U: #73c991;
   --git-D: #f85149;
   --sync: #d29922;
+  --comment: #e3b341;
+  --comment-bg: rgba(227, 179, 65, 0.16);
   --add-bg: rgba(63, 185, 80, 0.14);
   --del-bg: rgba(248, 81, 73, 0.14);
 }
@@ -67,6 +69,8 @@
   --muted: #5f6b7a;
   --faint: #9aa3ae;
   --accent: #0969da;
+  --comment: #bf8700;
+  --comment-bg: rgba(255, 213, 79, 0.35);
   --selection: rgba(9, 105, 218, 0.16);
   --hover: rgba(0, 0, 0, 0.04);
 
@@ -225,6 +229,27 @@ body.resizing { cursor: col-resize; user-select: none; }
 .cm-editor .cm-task-box { accent-color: var(--md-task-done); width: 15px; height: 15px; margin: 0 6px 0 0; vertical-align: -2px; cursor: pointer; }
 .cm-editor .cm-task-done { color: var(--muted); }
 .cm-editor .cm-task-done .cm-task-box { opacity: 0.9; }
+/* Single-choice lists (`<!-- choose: one -->`): round boxes, like radio buttons. */
+.cm-editor .cm-task-box.cm-task-radio { appearance: none; border: 1.5px solid var(--muted); border-radius: 50%; background: var(--bg); display: inline-grid; place-content: center; }
+.cm-editor .cm-task-box.cm-task-radio:checked { border-color: var(--md-task-done); }
+.cm-editor .cm-task-box.cm-task-radio:checked::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--md-task-done); }
+.cm-editor .cm-choice-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); }
+
+/* Comments: the commented text is highlighted and the thread shows as a card below its block. */
+.cm-editor .cm-comment-anchor { background: var(--comment-bg); border-bottom: 2px solid var(--comment); }
+.cm-editor .cm-comment-anchor-line { box-shadow: inset 3px 0 0 var(--comment); }
+.cm-comment-thread { margin: 4px 0 8px auto; max-width: min(460px, 85%); border: 1px solid var(--border); border-left: 3px solid var(--comment); border-radius: 8px; background: var(--panel); padding: 8px 10px; font-family: var(--font-ui, inherit); font-size: 13px; line-height: 1.45; display: flex; flex-direction: column; gap: 8px; }
+.cm-comment-head { display: flex; gap: 8px; align-items: baseline; }
+.cm-comment-head span { font-size: 11px; color: var(--faint); }
+.cm-comment-quote { font-size: 12px; color: var(--muted); border-left: 2px solid var(--comment); padding-left: 6px; margin: 2px 0; }
+.cm-comment-text { white-space: pre-wrap; }
+.cm-comment-reply { padding-left: 10px; border-left: 1px solid var(--border); }
+.cm-comment-actions { display: flex; gap: 6px; justify-content: flex-end; }
+.cm-comment-actions button { border: 1px solid var(--border); background: var(--panel-2); color: var(--text); border-radius: 6px; padding: 2px 10px; font-size: 12px; cursor: pointer; }
+.cm-comment-actions button:hover { border-color: var(--accent); }
+.cm-comment-actions button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.cm-comment-editor { display: flex; flex-direction: column; gap: 6px; }
+.cm-comment-editor textarea { width: 100%; box-sizing: border-box; resize: vertical; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--accent); border-radius: 6px; padding: 6px 8px; outline: none; }
 .cm-editor .cm-hr { display: inline-block; width: 100%; height: 1px; background: var(--border); vertical-align: middle; }
 .cm-editor .cm-table-src { font-family: var(--font-mono); font-size: 0.88em; color: var(--muted); }
 
@@ -316,6 +341,36 @@ body.resizing { cursor: col-resize; user-select: none; }
 .artifacts span { font-size: 11px; font-family: var(--font-mono); padding: 0 6px; border-radius: 4px; border: 1px dashed var(--border); color: var(--faint); }
 .artifacts span.on { border-style: solid; color: var(--text); background: var(--panel-2); }
 .page .hint { color: var(--muted); font-size: 13px; margin: 0; }
+.banner.proposal { justify-content: flex-start; }
+.banner.proposal.open { background: color-mix(in srgb, var(--accent) 10%, var(--panel)); color: var(--text); }
+.banner.proposal.open .btn { margin-left: auto; }
+.banner.proposal.answered { color: var(--status-in-progress); }
+.banner.proposal.applied { color: var(--status-done); }
+.banner.proposal.affects { flex-wrap: wrap; gap: 4px 10px; }
+.banner button.link { border: 0; background: none; padding: 0; color: var(--accent); font-family: var(--font-mono); font-size: 12px; cursor: pointer; }
+.banner button.link:hover { text-decoration: underline; }
+.proposal-chip { font-size: 12px; padding: 1px 8px; border-radius: 999px; border: 1px solid currentColor; }
+.proposal-chip.p-open { color: var(--sync); }
+.proposal-chip.p-answered { color: var(--status-in-progress); }
+.proposal-chip.p-applied { color: var(--status-done); }
+.tip { display: flex; align-items: center; gap: 12px; padding: 12px 14px; margin-bottom: 18px; border: 1px solid var(--accent); border-radius: 10px; background: color-mix(in srgb, var(--accent) 8%, var(--panel)); color: var(--accent); }
+.tip > div { flex: 1; color: var(--text); }
+.tip p { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
+.h-note { font-weight: 500; color: var(--faint); text-transform: none; letter-spacing: 0; }
+.task-row { display: flex; align-items: center; gap: 6px; font-size: 12.5px; padding: 2px 4px; margin: 0 -4px; border-radius: 5px; cursor: pointer; min-width: 0; }
+.task-row:hover { background: var(--hover); }
+.task-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--status-pending); }
+.task-dot.s-in-progress { background: var(--status-in-progress); }
+.task-dot.s-done { background: var(--status-done); }
+.task-dot.s-blocked { background: var(--status-blocked); }
+.task-id { font-family: var(--font-mono); font-size: 11px; color: var(--muted); flex: none; }
+.task-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.task-count { font-size: 11px; color: var(--faint); flex: none; }
+.board { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); align-items: start; }
+.board-col { display: flex; flex-direction: column; gap: 6px; padding: 8px; border-radius: 10px; background: var(--panel); border: 1px solid var(--border); }
+.board-head { display: flex; align-items: center; gap: 6px; margin-bottom: 2px; }
+.board-card { border: 1px solid var(--border); border-radius: 8px; background: var(--bg); padding: 6px 8px; display: flex; flex-direction: column; gap: 4px; }
+.task-area { font-size: 11px; color: var(--faint); font-family: var(--font-mono); }
 .meta { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
 .doc-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .doc-table td, .doc-table th { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--border); }

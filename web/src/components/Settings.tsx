@@ -1,6 +1,6 @@
 import { RotateCcw, X } from 'lucide-react'
-import { useEffect } from 'react'
-import { type EditorSettings, type Info, type Lang, LANG_NAMES, LANGS } from '../api'
+import { useEffect, useState } from 'react'
+import { type EditorSettings, type Info, type Lang, LANG_NAMES, LANGS, type ProposalLayout } from '../api'
 import type { T } from '../i18n'
 
 export const FONTS: Record<string, { label: string; stack: string }> = {
@@ -31,7 +31,8 @@ interface Props {
   info: Info
   settings: EditorSettings
   onSettings: (s: EditorSettings) => void
-  onLanguages: (c: { sourceLang?: Lang; langs?: Lang[] }) => void
+  onLanguages: (c: { sourceLang?: Lang; langs?: string[] }) => void
+  onProposals: (active: boolean, layout: ProposalLayout) => void
   onClose: () => void
 }
 
@@ -48,8 +49,10 @@ function Slider({ label, value, min, max, step, unit, onChange }: { label: strin
   )
 }
 
-export function Settings({ t, info, settings, onSettings, onLanguages, onClose }: Props) {
+export function Settings({ t, info, settings, onSettings, onLanguages, onProposals, onClose }: Props) {
   const set = (patch: Partial<EditorSettings>) => onSettings({ ...settings, ...patch })
+  // Chosen before activating; once active, every change is saved right away.
+  const [layout, setLayout] = useState<ProposalLayout>(info.proposals.layout)
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
@@ -129,18 +132,50 @@ export function Settings({ t, info, settings, onSettings, onLanguages, onClose }
           <p className="set-hint">{info.mainDoc ? t('settings.sourceHint', { doc: info.mainDoc }) : t('rules.noMain')}</p>
           <div className="set-row top">
             <span className="set-label">{t('settings.translations')}</span>
-            <div className="chips">
-              {LANGS.filter((l) => l !== info.sourceLang).map((l) => {
-                const on = info.langs.includes(l)
-                return (
-                  <button key={l} className={`chip${on ? ' on' : ''}`} onClick={() => onLanguages({ langs: on ? info.langs.filter((x) => x !== l) : [...info.langs, l] })}>
-                    {LANG_NAMES[l]}
+            {info.langs.length ? (
+              <div className="chips">
+                {info.langs.map((l) => (
+                  <button key={l} className="chip on" title={t('settings.removeLang')} onClick={() => onLanguages({ langs: info.langs.filter((x) => x !== l) })}>
+                    {info.langNames[l] ?? l} ×
                   </button>
-                )
-              })}
+                ))}
+              </div>
+            ) : (
+              <span className="set-value">{t('settings.noTranslations')}</span>
+            )}
+          </div>
+          <p className="set-hint">
+            {t('settings.translationsHint')} {t('settings.addLangHint')} <code>mdrules translate</code>
+          </p>
+        </section>
+
+        <section id="settings-proposals">
+          <div className="set-title">{t('settings.proposals')}</div>
+          <p className="set-hint">{t('settings.proposalsHint')}</p>
+          <div className="set-row">
+            <span className="set-label">{t('settings.layout')}</span>
+            <div className="segmented">
+              {(['general', 'structured'] as const).map((l) => (
+                <button
+                  key={l}
+                  className={layout === l ? 'active' : ''}
+                  onClick={() => {
+                    setLayout(l)
+                    if (info.proposals.active) onProposals(true, l)
+                  }}
+                >
+                  {l === 'general' ? t('settings.layoutGeneral') : t('settings.layoutStructured')}
+                </button>
+              ))}
             </div>
           </div>
-          <p className="set-hint">{t('settings.translationsHint')}</p>
+          <div className="set-row">
+            <span className="set-label">{info.proposals.active ? t('settings.proposalsOn') : t('settings.proposalsOff')}</span>
+            <button className={`btn${info.proposals.active ? '' : ' primary'}`} onClick={() => onProposals(!info.proposals.active, layout)}>
+              {info.proposals.active ? t('settings.deactivate') : t('settings.activate')}
+            </button>
+          </div>
+          <p className="set-hint">{t('settings.proposalsFiles')}</p>
         </section>
       </div>
     </div>

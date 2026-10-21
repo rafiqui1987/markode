@@ -1,7 +1,8 @@
-import { isLang, readConfig } from '../core/config.js'
+import { readConfig } from '../core/config.js'
 import { keepLanguage, markSynced, syncReport } from '../core/i18n.js'
 import { startServer } from '../server/index.js'
 import { runInit } from './init.js'
+import { runTranslate } from './translate.js'
 
 const HELP = `mdrules — visual editor for your project's Markdown
 
@@ -9,6 +10,7 @@ Usage
   mdrules                 init if needed, then open the editor
   mdrules init            (re)run the setup: main doc, specs structure, rules, languages
   mdrules serve           open the editor without running init
+  mdrules translate       choose languages to review the docs in (or: mdrules --translate)
   mdrules sync --status [--json]                    translations + files not in the source language
   mdrules sync --mark [--lang xx] <path...>|--all   record translations as in sync
   mdrules sync --keep <path...>                     keep files in their current language
@@ -31,6 +33,7 @@ async function main() {
   if (flag('--help') || flag('-h')) return console.log(HELP)
 
   if (command === 'sync') return sync()
+  if (command === 'translate' || flag('--translate')) return runTranslate(root)
   if (command === 'init') {
     await runInit(root)
     return
@@ -63,7 +66,7 @@ function sync() {
 
   if (flag('--mark')) {
     const only = option('--lang')
-    const langs = only && isLang(only) ? [only] : report.langs
+    const langs = only && report.langs.includes(only) ? [only] : report.langs
     const files = flag('--all') ? [...new Set(report.files.map((f) => f.path))] : paths('--mark')
     for (const p of files) {
       for (const l of langs) {

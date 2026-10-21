@@ -1,10 +1,15 @@
 import { syntaxTree } from '@codemirror/language'
 import { type EditorState, Facet, type Range, type SelectionRange, StateEffect, StateField } from '@codemirror/state'
 import { Decoration, type DecorationSet, EditorView } from '@codemirror/view'
-import { BulletWidget, CheckboxWidget, CodeLangWidget, type Theme, FootnoteDefWidget, FootnoteRefWidget, imageUrl, ImageWidget, MathWidget, MermaidWidget, RuleWidget, TableWidget, TreeWidget } from './widgets'
+import type { T } from '../i18n'
+import { choiceList, commentAuthor, CommentThreadWidget, findThreads, isChoiceMarker } from './comments'
+import { BulletWidget, ChoiceLabelWidget, CheckboxWidget, CodeLangWidget, type Theme, FootnoteDefWidget, FootnoteRefWidget, imageUrl, ImageWidget, MathWidget, MermaidWidget, RuleWidget, TableWidget, TreeWidget } from './widgets'
 
 /** Path of the open document, relative to the project: relative image paths resolve against it. */
 export const docPath = Facet.define<string, string>({ combine: (v) => v[0] ?? '' })
+
+/** UI strings for widgets that show text (comment threads). */
+export const translator = Facet.define<T, T>({ combine: (v) => v[0] ?? ((k: string) => k) as T })
 
 /** The app's color theme; diagrams are re-rendered when it changes, without rebuilding the editor. */
 export const setTheme = StateEffect.define<Theme>()
@@ -175,7 +180,7 @@ function build(state: EditorState): DecorationSet {
           if (!tm) return
           const checked = /x/i.test(doc.sliceString(tm.from, tm.to))
           if (checked) out.push(line('cm-task-done').range(doc.lineAt(node.from).from))
-          if (!lineTouches(node.from)) out.push(Decoration.replace({ widget: new CheckboxWidget(checked) }).range(tm.from, tm.to))
+          if (!lineTouches(node.from)) out.push(Decoration.replace({ widget: new CheckboxWidget(checked, !!choiceList(state, tm.from)) }).range(tm.from, tm.to))
           return
         }
         case 'FencedCode': {
@@ -226,6 +231,24 @@ function build(state: EditorState): DecorationSet {
       }
     },
   })
+
+  // Comment threads show as cards below the block they refer to; the commented text is highlighted.
+  const author = state.facet(commentAuthor)
+  for (const th of findThreads(doc)) {
+    if (th.anchor) {
+      const quote = th.entries[0].quote.replace(/…$/, '')
+      const anchorText = doc.sliceString(th.anchor.from, th.anchor.to)
+      const at = quote ? anchorText.indexOf(quote) : -1
+      if (at >= 0) out.push(mark('cm-comment-anchor').range(th.anchor.from + at, th.anchor.from + at + quote.length))
+      else out.push(line('cm-comment-anchor-line').range(th.anchor.from))
+    }
+    if (!touches(th.from, th.to)) out.push(Decoration.replace({ widget: new CommentThreadWidget(th.entries, author, state.facet(translator)), block: true }).range(th.from, th.to))
+  }
+  // `<!-- choose: one -->` before a checklist: a small label instead of the raw comment.
+  for (let n = 1; n <= doc.lines; n++) {
+    const l = doc.line(n)
+    if (isChoiceMarker(l.text) && !touches(l.from, l.to)) out.push(Decoration.replace({ widget: new ChoiceLabelWidget(state.facet(translator)('choice.one')) }).range(l.from, l.to))
+  }
 
   return Decoration.set(out, true)
 }

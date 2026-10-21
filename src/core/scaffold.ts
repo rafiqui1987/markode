@@ -2,16 +2,17 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { TEMPLATES_DIR, toPosix } from './config.js'
 
-const today = () => new Date().toISOString().slice(0, 10)
+export const today = () => new Date().toISOString().slice(0, 10)
 
-function fill(text: string, vars: Record<string, string>) {
+export function fill(text: string, vars: Record<string, string>) {
   return text.replace(/\{\{(\w+)\}\}/g, (_, k) => vars[k] ?? '')
 }
 
 export function copyTree(src: string, dest: string, vars: Record<string, string>, created: string[], root: string) {
   for (const e of fs.readdirSync(src, { withFileTypes: true })) {
     const from = path.join(src, e.name)
-    const to = path.join(dest, e.name)
+    // Names can hold variables too, e.g. `{{prefix}}-001-set-up.md`.
+    const to = path.join(dest, fill(e.name, vars))
     if (e.isDirectory()) {
       fs.mkdirSync(to, { recursive: true })
       copyTree(from, to, vars, created, root)
@@ -22,13 +23,6 @@ export function copyTree(src: string, dest: string, vars: Record<string, string>
   }
 }
 
-/** Create docs/ from templates; never overwrites existing files. */
-export function scaffoldDocs(root: string): string[] {
-  const created: string[] = []
-  fs.mkdirSync(path.join(root, 'docs'), { recursive: true })
-  copyTree(path.join(TEMPLATES_DIR, 'docs'), path.join(root, 'docs'), { date: today() }, created, root)
-  return created
-}
 
 export function createMainDoc(root: string, name: string) {
   const file = path.join(root, name)

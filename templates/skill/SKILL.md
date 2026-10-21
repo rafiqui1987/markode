@@ -14,21 +14,20 @@ The user reads and edits this project's Markdown in **mdrules**, a visual editor
 
 ## Frontmatter
 
-Put this at the top of docs that track work:
-
-
+Docs that track work start with a frontmatter block; the mdrules dashboard reads it:
 
 ```yaml
 ---
-type: phase        # phase | tasks | rules | architecture | decision | note
-status: pending    # pending | in-progress | done | blocked
-phase: 2           # only for type: phase (ordering)
+type: task         # vision | architecture | phase | tasks | task | note
+status: pending    # pending | in-progress | blocked | done
+phase: 2           # phases: their order; tasks: the phase they belong to
 updated: YYYY-MM-DD
 ---
 ```
 
 - Update `status` and `updated` whenever you change the doc.
-- Phases: one file per phase in `docs/phases/NN-name.md`, created when the phase starts being planned.
+- If the main doc has a "Workflow (mdrules method)" section, follow it: it says where vision,
+  architecture, phases and tasks live, and how to start and close a session.
 
 ## Content conventions
 
@@ -39,8 +38,6 @@ updated: YYYY-MM-DD
 | Folder / module structure | a ` ```tree ` block: indented lines; two spaces + `#` starts a description |
 | Flows, sequences, states | a ` ```mermaid ` block |
 
-When you finish a task: tick its checkbox, update the doc's `status`/`updated`, and set the phase to `done` when all its tasks are done.
-
 Never edit the section between `<!-- mdrules:rules:start -->` and `<!-- mdrules:rules:end -->` by hand; it is generated from the user's rule presets.
 
 ## Translation sync (`/mdrules sync`)
@@ -48,7 +45,9 @@ Never edit the section between `<!-- mdrules:rules:start -->` and `<!-- mdrules:
 Run this when the user asks for `/mdrules sync`, at the start of a session, and after you edit any `.md` file.
 
 1. `mdrules sync --status --json` (use `pnpm exec mdrules` if it is a local dependency). It returns:
-   `{ sourceLang, langs, foreign: [{ path, detected }], files: [{ path, lang, status, translation }] }`.
+   `{ sourceLang, langs, names, foreign: [{ path, detected }], files: [{ path, lang, status, translation }] }`.
+   `names` maps each language code to its name (`ja` → `Japanese`): translate into that language, also for
+   codes the user added by hand.
 2. **Files not in the source language** (`foreign`): ask the user, in one question listing them, whether to convert each one to `sourceLang`.
    - Yes: rewrite the file in place in the source language, keeping structure, code, links and markers byte-identical.
    - No: `mdrules sync --keep <path> [<path>...]` so they are not offered again.

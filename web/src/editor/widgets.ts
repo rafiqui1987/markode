@@ -1,6 +1,7 @@
 import { type EditorView, WidgetType } from '@codemirror/view'
 import type { T } from '../i18n'
 import { parseTable, serializeTable, tableRangeAt, type TableModel } from './table'
+import { toggleTaskAt } from './comments'
 
 let translate: T = (k) => k
 export function setWidgetTranslate(t: T) {
@@ -669,28 +670,46 @@ export class TableWidget extends WidgetType {
 // ---------------------------------------------------------------- inline
 
 export class CheckboxWidget extends WidgetType {
-  constructor(readonly checked: boolean) {
+  /** `radio`: the task is in a single-choice list (`<!-- choose: one -->`). */
+  constructor(
+    readonly checked: boolean,
+    readonly radio = false,
+  ) {
     super()
   }
   eq(other: CheckboxWidget) {
-    return other.checked === this.checked
+    return other.checked === this.checked && other.radio === this.radio
   }
   toDOM(view: EditorView) {
     const box = document.createElement('input')
     box.type = 'checkbox'
-    box.className = 'cm-task-box'
+    box.className = `cm-task-box${this.radio ? ' cm-task-radio' : ''}`
     box.checked = this.checked
     box.addEventListener('mousedown', (e) => e.preventDefault())
     box.addEventListener('click', (e) => {
       e.preventDefault()
-      const pos = view.posAtDOM(box)
-      const text = view.state.sliceDoc(pos, pos + 3)
-      if (/^\[[ xX]\]$/.test(text)) view.dispatch({ changes: { from: pos + 1, to: pos + 2, insert: this.checked ? ' ' : 'x' } })
+      toggleTaskAt(view, view.posAtDOM(box))
     })
     return box
   }
   ignoreEvent() {
     return true
+  }
+}
+
+/** Shown instead of `<!-- choose: one -->`: the list below is single choice. */
+export class ChoiceLabelWidget extends WidgetType {
+  constructor(readonly label: string) {
+    super()
+  }
+  eq(other: ChoiceLabelWidget) {
+    return other.label === this.label
+  }
+  toDOM() {
+    const s = document.createElement('span')
+    s.className = 'cm-choice-label'
+    s.textContent = this.label
+    return s
   }
 }
 

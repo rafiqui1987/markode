@@ -1,7 +1,7 @@
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
-import { type Lang, readConfig, stateDir } from './config.js'
+import { type Lang, langName, readConfig, stateDir } from './config.js'
 import { detectLang } from './langdetect.js'
 import { projectSourceLang } from './rules.js'
 import { flattenFiles, scanTree } from './scan.js'
@@ -15,13 +15,13 @@ interface FileState {
 }
 
 interface State {
-  translations: Partial<Record<Lang, Record<string, FileState>>>
+  translations: Partial<Record<string, Record<string, FileState>>>
   /** Files the user chose to keep in a language other than the source one. */
   keepLanguage: Record<string, Lang>
 }
 
 const stateFile = (root: string) => path.join(stateDir(root), 'state.json')
-export const translationPath = (root: string, lang: Lang, rel: string) => path.join(stateDir(root), 'i18n', lang, rel)
+export const translationPath = (root: string, lang: string, rel: string) => path.join(stateDir(root), 'i18n', lang, rel)
 
 const hash = (text: string) => crypto.createHash('sha1').update(text).digest('hex').slice(0, 12)
 const readText = (abs: string) => {
@@ -48,7 +48,7 @@ function writeState(root: string, state: State) {
   fs.writeFileSync(stateFile(root), JSON.stringify(state, null, 2) + '\n')
 }
 
-export function fileStatus(root: string, lang: Lang, rel: string): SyncStatus {
+export function fileStatus(root: string, lang: string, rel: string): SyncStatus {
   const source = readText(path.join(root, rel))
   const translation = readText(translationPath(root, lang, rel))
   if (translation === null || source === null) return 'missing'
@@ -65,7 +65,7 @@ export function fileStatus(root: string, lang: Lang, rel: string): SyncStatus {
 
 export interface StatusEntry {
   path: string
-  lang: Lang
+  lang: string
   status: SyncStatus
   translation: string
 }
@@ -75,7 +75,7 @@ export interface ForeignEntry {
   detected: Lang
 }
 
-export function allStatuses(root: string, lang: Lang): StatusEntry[] {
+export function allStatuses(root: string, lang: string): StatusEntry[] {
   return flattenFiles(scanTree(root)).map((f) => ({
     path: f.path,
     lang,
@@ -104,13 +104,15 @@ export function syncReport(root: string) {
   return {
     sourceLang,
     langs,
+    /** Language names by code: translate into these (codes added by hand have no built-in name). */
+    names: Object.fromEntries([sourceLang, ...langs].map((l) => [l, langName(l, config)])),
     foreign: foreignFiles(root, sourceLang),
     files: langs.flatMap((l) => allStatuses(root, l)),
   }
 }
 
 /** Record that source and translation of `rel` are now in sync. */
-export function markSynced(root: string, lang: Lang, rel: string) {
+export function markSynced(root: string, lang: string, rel: string) {
   const source = readText(path.join(root, rel))
   const translation = readText(translationPath(root, lang, rel))
   if (source === null) throw new Error(`Source not found: ${rel}`)

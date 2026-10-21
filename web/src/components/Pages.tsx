@@ -1,4 +1,4 @@
-import { Check, Plus, Save, Trash2 } from 'lucide-react'
+import { Check, MessageSquareText, Plus, Save, Send, Trash2, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { api, type DocSummary, type GitStatus, type Progress, type Rule, type SddSummary } from '../api'
 import type { T, TKey } from '../i18n'
@@ -9,6 +9,107 @@ export function StatusChip({ status, t }: { status: string | null; t: T }) {
   if (!status) return null
   const known = STATUSES.includes(status)
   return <span className={`status-chip s-${status}`}>{known ? t(`status.${status}` as TKey) : status}</span>
+}
+
+// ------------------------------------------------------------ proposals
+
+/** Above a proposal: what it waits for, and the button that sends the answer back to the AI. */
+export function ProposalBanner({ status, copied, affects, t, onSend, onOpen }: { status: string | null; copied: boolean; affects: string[]; t: T; onSend: () => void; onOpen: (p: string) => void }) {
+  const changes = affects.length > 0 && (
+    <div className="banner proposal affects">
+      {t('proposal.affects')}
+      {affects.map((p) => (
+        <button key={p} className="link" onClick={() => onOpen(p)}>
+          {p}
+        </button>
+      ))}
+    </div>
+  )
+  if (status === 'applied') return <div className="banner proposal applied">{t('proposal.applied')}</div>
+  if (status === 'answered')
+    return (
+      <>
+        <div className="banner proposal answered">
+          <Check size={14} /> {copied ? t('proposal.copied') : t('proposal.answered')}
+        </div>
+        {changes}
+      </>
+    )
+  return (
+    <>
+      <div className="banner proposal open">
+        <MessageSquareText size={14} /> {t('proposal.open')}
+        <button className="btn primary" onClick={onSend}>
+          <Send size={13} /> {t('proposal.send')}
+        </button>
+      </div>
+      {changes}
+    </>
+  )
+}
+
+const PROPOSAL_ORDER = ['open', 'answered', 'applied']
+
+function Proposals({ docs, t, onOpen }: { docs: DocSummary[]; t: T; onOpen: (p: string) => void }) {
+  const sorted = [...docs].sort((a, b) => PROPOSAL_ORDER.indexOf(a.status ?? 'open') - PROPOSAL_ORDER.indexOf(b.status ?? 'open') || (b.updated ?? '').localeCompare(a.updated ?? ''))
+  const waiting = docs.filter((d) => (d.status ?? 'open') === 'open').length
+  return (
+    <section>
+      <h2>
+        {t('dash.proposals')} {waiting > 0 && <span className="pill warn">{t('dash.proposalsWaiting', { n: waiting })}</span>}
+      </h2>
+      <table className="doc-table">
+        <tbody>
+          {sorted.map((d) => (
+            <tr className="click" key={d.path} onClick={() => onOpen(d.path)}>
+              <td style={{ fontWeight: 500 }}>{d.title.replace(/^proposal:\s*/i, '')}</td>
+              <td className="path">{d.path}</td>
+              <td>
+                <span className={`proposal-chip p-${d.status ?? 'open'}`}>{t(`proposal.status.${PROPOSAL_ORDER.includes(d.status ?? 'open') ? (d.status ?? 'open') : 'open'}` as TKey)}</span>
+              </td>
+              <td style={{ color: 'var(--faint)', whiteSpace: 'nowrap' }}>{d.updated ?? ''}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
+  )
+}
+
+/** Offered while proposals are off; dismissed for good from this browser. */
+function ProposalsTip({ t, onActivate }: { t: T; onActivate: () => void }) {
+  const [hidden, setHidden] = useState(() => {
+    try {
+      return localStorage.getItem('mdrules.proposalsTip') === 'hidden'
+    } catch {
+      return false
+    }
+  })
+  if (hidden) return null
+  return (
+    <div className="tip">
+      <MessageSquareText size={18} />
+      <div>
+        <strong>{t('dash.tipTitle')}</strong>
+        <p>{t('dash.tip')}</p>
+      </div>
+      <button className="btn primary" onClick={onActivate}>
+        {t('dash.tipActivate')}
+      </button>
+      <button
+        className="icon-btn"
+        title={t('app.close')}
+        onClick={() => {
+          setHidden(true)
+          try {
+            localStorage.setItem('mdrules.proposalsTip', 'hidden')
+          } catch {}
+        }}
+      >
+        <X size={14} />
+      </button>
+    </div>
+  )
 }
 
 // ------------------------------------------------------------ dashboard
@@ -123,7 +224,60 @@ function SpecKitSection({ data, t, onOpen }: { data: NonNullable<SddSummary['spe
   )
 }
 
-export function Dashboard({ t, tick, onOpen }: { t: T; tick: number; onOpen: (p: string) => void }) {
+/** One task inside a phase card or the board: status dot, id, title and area. */
+function TaskRow({ task, t, onOpen }: { task: DocSummary; t: T; onOpen: (p: string) => void }) {
+  return (
+    <div
+      className="task-row"
+      title={task.path}
+      onClick={(e) => {
+        e.stopPropagation()
+        onOpen(task.path)
+      }}
+    >
+      <span className={`task-dot s-${task.status ?? 'pending'}`} title={task.status ? t(`status.${task.status}` as TKey) : ''} />
+      {task.id && <span className="task-id">{task.id}</span>}
+      <span className="task-title">{task.title}</span>
+      {task.tasks.total > 0 && (
+        <span className="task-count">
+          {task.tasks.done}/{task.tasks.total}
+        </span>
+      )}
+    </div>
+  )
+}
+
+/** Tasks of the mdrules method by status: what is moving, what is stuck, what is next. */
+function TaskBoard({ tasks, t, onOpen }: { tasks: DocSummary[]; t: T; onOpen: (p: string) => void }) {
+  const done = tasks.filter((d) => d.status === 'done').length
+  return (
+    <>
+      <h2>
+        {t('dash.board')} <span className="h-note">{t('dash.doneCount', { n: done, total: tasks.length })}</span>
+      </h2>
+      <div className="board">
+        {(['in-progress', 'blocked', 'pending'] as const).map((status) => {
+          const col = tasks.filter((d) => (d.status ?? 'pending') === status)
+          return (
+            <div className="board-col" key={status}>
+              <div className="board-head">
+                <StatusChip status={status} t={t} /> <span className="h-note">{col.length}</span>
+              </div>
+              {col.map((d) => (
+                <div className="board-card" key={d.path}>
+                  <TaskRow task={d} t={t} onOpen={onOpen} />
+                  {d.area && <span className="task-area">{d.area}</span>}
+                </div>
+              ))}
+            </div>
+          )
+        })}
+      </div>
+    </>
+  )
+}
+
+export function Dashboard({ t, tick, onOpen, proposalsActive, onActivateProposals }: { t: T; tick: number; onOpen: (p: string) => void; proposalsActive: boolean; onActivateProposals: () => void }) {
   const [docs, setDocs] = useState<DocSummary[]>([])
   const [sdd, setSdd] = useState<SddSummary>({})
   useEffect(() => {
@@ -134,11 +288,15 @@ export function Dashboard({ t, tick, onOpen }: { t: T; tick: number; onOpen: (p:
   }, [tick])
 
   const phases = docs.filter((d) => d.type === 'phase').sort((a, b) => (a.phase ?? 999) - (b.phase ?? 999) || a.path.localeCompare(b.path))
-  const others = docs.filter((d) => d.type !== 'phase')
+  const taskDocs = docs.filter((d) => d.type === 'task').sort((a, b) => (b.updated ?? '').localeCompare(a.updated ?? '') || (a.id ?? a.path).localeCompare(b.id ?? b.path))
+  const proposals = docs.filter((d) => d.type === 'proposal')
+  const others = docs.filter((d) => d.type !== 'phase' && d.type !== 'task' && d.type !== 'proposal')
   const types = [...new Set(others.map((d) => d.type ?? ''))].sort((a, b) => (a === '' ? 1 : b === '' ? -1 : a.localeCompare(b)))
 
   return (
     <div className="page">
+      {!proposalsActive && <ProposalsTip t={t} onActivate={onActivateProposals} />}
+      {proposals.length > 0 && <Proposals docs={proposals} t={t} onOpen={onOpen} />}
       {sdd.openspec && <OpenSpecSection data={sdd.openspec} t={t} onOpen={onOpen} />}
       {sdd.speckit && <SpecKitSection data={sdd.speckit} t={t} onOpen={onOpen} />}
       {(phases.length > 0 || (!sdd.openspec && !sdd.speckit)) && <h2>{t('dash.phases')}</h2>}
@@ -159,6 +317,11 @@ export function Dashboard({ t, tick, onOpen }: { t: T; tick: number; onOpen: (p:
                 <div className="meta">
                   {p.tasks.done}/{p.tasks.total} {t('dash.tasks')} · {pct}%{p.updated && <span style={{ marginLeft: 'auto' }}>{p.updated}</span>}
                 </div>
+                {taskDocs
+                  .filter((d) => d.phase === p.phase)
+                  .map((d) => (
+                    <TaskRow key={d.path} task={d} t={t} onOpen={onOpen} />
+                  ))}
               </div>
             )
           })}
@@ -166,6 +329,8 @@ export function Dashboard({ t, tick, onOpen }: { t: T; tick: number; onOpen: (p:
       ) : (
         !sdd.openspec && !sdd.speckit && <p style={{ color: 'var(--muted)' }}>{t('dash.noPhases')}</p>
       )}
+
+      {taskDocs.length > 0 && <TaskBoard tasks={taskDocs} t={t} onOpen={onOpen} />}
 
       {types.map((type) => (
         <section key={type}>
