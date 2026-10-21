@@ -67,7 +67,9 @@ don't have to choose:
 
 - Run `mdrules translate` and pick a language to review the docs in: Spanish, French, Portuguese,
   German or Italian, or **type any other** (Japanese, Dutch…). mdrules then shows **every doc in that
-  language**, and the interface too for the built-in ones (menus stay in English for the others).
+  language**.
+- The menus are in English by default and don't depend on the docs' language: pick English, Spanish,
+  French, Portuguese, German or Italian in **Settings → General**.
   Read the architecture, tick tasks, write notes and fix a rule, all in your language.
 - The files in the repository **stay in one source language** (English by default), so the agent and
   the rest of the team keep reading one consistent version.
@@ -177,7 +179,8 @@ skill.
 
 - **Changes**: Git diff of your Markdown, grouped by folder and section.
 - **Rules**: reusable rule presets (e.g. "ask before committing") written into `CLAUDE.md` or `AGENTS.md`.
-- **Settings**: font, size, line spacing, margins, line width and wrapping; light and dark themes.
+- **Settings**, by section: General (interface language, theme), Editor (font, size, line spacing,
+  margins, line width, wrapping), Document languages and Proposals.
 
 ## Keyboard shortcuts
 
@@ -187,7 +190,9 @@ skill.
 | `Ctrl+Enter` | Tick or untick the task on the current line |
 | `Alt+H` | After pasting a table from a spreadsheet: toggle the header row |
 | `Ctrl+Z` / `Ctrl+Y` | Undo / redo |
-| `Ctrl+F` | Find and replace |
+| `Ctrl+F` / `Ctrl+H` | Find / find and replace (box at the top right) |
+| `Enter` / `Shift+Enter` | Next / previous match |
+| `Alt+C` / `Alt+W` / `Alt+R` | Match case / whole word / regular expression |
 | `Escape` | Close a menu or the selection toolbar |
 
 ## Commands

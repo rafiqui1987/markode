@@ -11,6 +11,7 @@ export interface EditorSettings {
   padding: number
   width: 'full' | 'readable'
   wrap: boolean
+  uiLang: string
 }
 
 export interface TreeNode {

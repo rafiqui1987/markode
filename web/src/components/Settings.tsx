@@ -1,7 +1,7 @@
-import { RotateCcw, X } from 'lucide-react'
+import { Languages, MessageSquare, RotateCcw, SlidersHorizontal, Type, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { type EditorSettings, type Info, type Lang, LANG_NAMES, LANGS, type ProposalLayout } from '../api'
-import type { T } from '../i18n'
+import { type T, UI_LANGS } from '../i18n'
 
 export const FONTS: Record<string, { label: string; stack: string }> = {
   inter: { label: 'Inter', stack: "'Inter', system-ui, sans-serif" },
@@ -13,7 +13,7 @@ export const FONTS: Record<string, { label: string; stack: string }> = {
   system: { label: 'System', stack: "system-ui, -apple-system, 'Segoe UI', sans-serif" },
 }
 
-export const DEFAULT_SETTINGS: EditorSettings = { font: 'inter', size: 15, lineHeight: 1.65, padding: 28, width: 'full', wrap: true }
+export const DEFAULT_SETTINGS: EditorSettings = { font: 'inter', size: 15, lineHeight: 1.65, padding: 28, width: 'full', wrap: true, uiLang: 'en' }
 
 /** Editor settings are applied as CSS variables, so every view picks them up at once. */
 export function applySettings(s: EditorSettings) {
@@ -26,8 +26,15 @@ export function applySettings(s: EditorSettings) {
   document.documentElement.dataset.wrap = s.wrap ? 'on' : 'off'
 }
 
+export type SettingsSection = 'general' | 'editor' | 'languages' | 'proposals'
+/** null follows the system. */
+export type Theme = 'light' | 'dark' | null
+
 interface Props {
   t: T
+  section: SettingsSection
+  theme: Theme
+  onTheme: (theme: Theme) => void
   info: Info
   settings: EditorSettings
   onSettings: (s: EditorSettings) => void
@@ -35,6 +42,13 @@ interface Props {
   onProposals: (active: boolean, layout: ProposalLayout) => void
   onClose: () => void
 }
+
+const SECTIONS: { id: SettingsSection; icon: typeof Type; label: 'settings.general' | 'settings.editor' | 'settings.languages' | 'settings.proposals' }[] = [
+  { id: 'general', icon: SlidersHorizontal, label: 'settings.general' },
+  { id: 'editor', icon: Type, label: 'settings.editor' },
+  { id: 'languages', icon: Languages, label: 'settings.languages' },
+  { id: 'proposals', icon: MessageSquare, label: 'settings.proposals' },
+]
 
 function Slider({ label, value, min, max, step, unit, onChange }: { label: string; value: number; min: number; max: number; step: number; unit: string; onChange: (v: number) => void }) {
   return (
@@ -49,7 +63,8 @@ function Slider({ label, value, min, max, step, unit, onChange }: { label: strin
   )
 }
 
-export function Settings({ t, info, settings, onSettings, onLanguages, onProposals, onClose }: Props) {
+export function Settings({ t, section: initialSection, theme, onTheme, info, settings, onSettings, onLanguages, onProposals, onClose }: Props) {
+  const [section, setSection] = useState(initialSection)
   const set = (patch: Partial<EditorSettings>) => onSettings({ ...settings, ...patch })
   // Chosen before activating; once active, every change is saved right away.
   const [layout, setLayout] = useState<ProposalLayout>(info.proposals.layout)
@@ -70,113 +85,156 @@ export function Settings({ t, info, settings, onSettings, onLanguages, onProposa
           </button>
         </div>
 
-        <section>
-          <div className="set-title">
-            {t('settings.editor')}
-            <button className="btn small" onClick={() => onSettings({ ...DEFAULT_SETTINGS })}>
-              <RotateCcw size={12} /> {t('settings.reset')}
-            </button>
-          </div>
-          <label className="set-row">
-            <span className="set-label">{t('settings.font')}</span>
-            <select className="control" value={settings.font} onChange={(e) => set({ font: e.target.value })}>
-              {Object.entries(FONTS).map(([id, f]) => (
-                <option key={id} value={id}>
-                  {f.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <Slider label={t('settings.size')} value={settings.size} min={12} max={22} step={1} unit="px" onChange={(size) => set({ size })} />
-          <Slider label={t('settings.lineHeight')} value={settings.lineHeight} min={1.2} max={2.2} step={0.05} unit="" onChange={(lineHeight) => set({ lineHeight })} />
-          <Slider label={t('settings.padding')} value={settings.padding} min={0} max={200} step={4} unit="px" onChange={(padding) => set({ padding })} />
-          <div className="set-row">
-            <span className="set-label">{t('settings.width')}</span>
-            <div className="segmented">
-              {(['full', 'readable'] as const).map((w) => (
-                <button key={w} className={settings.width === w ? 'active' : ''} onClick={() => set({ width: w })}>
-                  {w === 'full' ? t('settings.widthFull') : t('settings.widthReadable')}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="set-row">
-            <span className="set-label">{t('settings.wrap')}</span>
-            <div className="segmented">
-              {[true, false].map((w) => (
-                <button key={String(w)} className={settings.wrap === w ? 'active' : ''} onClick={() => set({ wrap: w })}>
-                  {w ? t('settings.wrapOn') : t('settings.wrapOff')}
-                </button>
-              ))}
-            </div>
-          </div>
-          <p className="set-hint">{t('settings.wrapHint')}</p>
-          <div className="set-preview">
-            <div className="set-preview-h">mdrules</div>
-            <p>{t('settings.preview')}</p>
-          </div>
-        </section>
+        <div className="modal-body">
+          <nav className="set-nav">
+            {SECTIONS.map((s) => (
+              <button key={s.id} className={section === s.id ? 'active' : ''} onClick={() => setSection(s.id)}>
+                <s.icon size={15} /> {t(s.label)}
+              </button>
+            ))}
+          </nav>
 
-        <section>
-          <div className="set-title">{t('settings.languages')}</div>
-          <label className="set-row">
-            <span className="set-label">{t('settings.source')}</span>
-            <select className="control" value={info.sourceLang} disabled={!info.mainDoc} onChange={(e) => onLanguages({ sourceLang: e.target.value as Lang })}>
-              {LANGS.map((l) => (
-                <option key={l} value={l}>
-                  {LANG_NAMES[l]}
-                </option>
-              ))}
-            </select>
-          </label>
-          <p className="set-hint">{info.mainDoc ? t('settings.sourceHint', { doc: info.mainDoc }) : t('rules.noMain')}</p>
-          <div className="set-row top">
-            <span className="set-label">{t('settings.translations')}</span>
-            {info.langs.length ? (
-              <div className="chips">
-                {info.langs.map((l) => (
-                  <button key={l} className="chip on" title={t('settings.removeLang')} onClick={() => onLanguages({ langs: info.langs.filter((x) => x !== l) })}>
-                    {info.langNames[l] ?? l} ×
-                  </button>
-                ))}
+          {section === 'general' && (
+            <section>
+              <div className="set-title">{t('settings.general')}</div>
+              <label className="set-row">
+                <span className="set-label">{t('settings.uiLang')}</span>
+                <select className="control" value={settings.uiLang} onChange={(e) => set({ uiLang: e.target.value })}>
+                  {UI_LANGS.map((l) => (
+                    <option key={l} value={l}>
+                      {LANG_NAMES[l]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <p className="set-hint">{t('settings.uiLangHint')}</p>
+              <div className="set-row">
+                <span className="set-label">{t('app.theme')}</span>
+                <div className="segmented">
+                  {([null, 'light', 'dark'] as const).map((th) => (
+                    <button key={String(th)} className={theme === th ? 'active' : ''} onClick={() => onTheme(th)}>
+                      {th === null ? t('settings.themeSystem') : th === 'light' ? t('settings.themeLight') : t('settings.themeDark')}
+                    </button>
+                  ))}
+                </div>
               </div>
-            ) : (
-              <span className="set-value">{t('settings.noTranslations')}</span>
-            )}
-          </div>
-          <p className="set-hint">
-            {t('settings.translationsHint')} {t('settings.addLangHint')} <code>mdrules translate</code>
-          </p>
-        </section>
+            </section>
+          )}
 
-        <section id="settings-proposals">
-          <div className="set-title">{t('settings.proposals')}</div>
-          <p className="set-hint">{t('settings.proposalsHint')}</p>
-          <div className="set-row">
-            <span className="set-label">{t('settings.layout')}</span>
-            <div className="segmented">
-              {(['general', 'structured'] as const).map((l) => (
-                <button
-                  key={l}
-                  className={layout === l ? 'active' : ''}
-                  onClick={() => {
-                    setLayout(l)
-                    if (info.proposals.active) onProposals(true, l)
-                  }}
-                >
-                  {l === 'general' ? t('settings.layoutGeneral') : t('settings.layoutStructured')}
+          {section === 'editor' && (
+            <section>
+              <div className="set-title">
+                {t('settings.editor')}
+                <button className="btn small" onClick={() => onSettings({ ...DEFAULT_SETTINGS, uiLang: settings.uiLang })}>
+                  <RotateCcw size={12} /> {t('settings.reset')}
                 </button>
-              ))}
-            </div>
-          </div>
-          <div className="set-row">
-            <span className="set-label">{info.proposals.active ? t('settings.proposalsOn') : t('settings.proposalsOff')}</span>
-            <button className={`btn${info.proposals.active ? '' : ' primary'}`} onClick={() => onProposals(!info.proposals.active, layout)}>
-              {info.proposals.active ? t('settings.deactivate') : t('settings.activate')}
-            </button>
-          </div>
-          <p className="set-hint">{t('settings.proposalsFiles')}</p>
-        </section>
+              </div>
+              <label className="set-row">
+                <span className="set-label">{t('settings.font')}</span>
+                <select className="control" value={settings.font} onChange={(e) => set({ font: e.target.value })}>
+                  {Object.entries(FONTS).map(([id, f]) => (
+                    <option key={id} value={id}>
+                      {f.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <Slider label={t('settings.size')} value={settings.size} min={12} max={22} step={1} unit="px" onChange={(size) => set({ size })} />
+              <Slider label={t('settings.lineHeight')} value={settings.lineHeight} min={1.2} max={2.2} step={0.05} unit="" onChange={(lineHeight) => set({ lineHeight })} />
+              <Slider label={t('settings.padding')} value={settings.padding} min={0} max={200} step={4} unit="px" onChange={(padding) => set({ padding })} />
+              <div className="set-row">
+                <span className="set-label">{t('settings.width')}</span>
+                <div className="segmented">
+                  {(['full', 'readable'] as const).map((w) => (
+                    <button key={w} className={settings.width === w ? 'active' : ''} onClick={() => set({ width: w })}>
+                      {w === 'full' ? t('settings.widthFull') : t('settings.widthReadable')}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="set-row">
+                <span className="set-label">{t('settings.wrap')}</span>
+                <div className="segmented">
+                  {[true, false].map((w) => (
+                    <button key={String(w)} className={settings.wrap === w ? 'active' : ''} onClick={() => set({ wrap: w })}>
+                      {w ? t('settings.wrapOn') : t('settings.wrapOff')}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <p className="set-hint">{t('settings.wrapHint')}</p>
+              <div className="set-preview">
+                <div className="set-preview-h">mdrules</div>
+                <p>{t('settings.preview')}</p>
+              </div>
+            </section>
+          )}
+
+          {section === 'languages' && (
+            <section>
+              <div className="set-title">{t('settings.languages')}</div>
+              <label className="set-row">
+                <span className="set-label">{t('settings.source')}</span>
+                <select className="control" value={info.sourceLang} disabled={!info.mainDoc} onChange={(e) => onLanguages({ sourceLang: e.target.value as Lang })}>
+                  {LANGS.map((l) => (
+                    <option key={l} value={l}>
+                      {LANG_NAMES[l]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <p className="set-hint">{info.mainDoc ? t('settings.sourceHint', { doc: info.mainDoc }) : t('rules.noMain')}</p>
+              <div className="set-row top">
+                <span className="set-label">{t('settings.translations')}</span>
+                {info.langs.length ? (
+                  <div className="chips">
+                    {info.langs.map((l) => (
+                      <button key={l} className="chip on" title={t('settings.removeLang')} onClick={() => onLanguages({ langs: info.langs.filter((x) => x !== l) })}>
+                        {info.langNames[l] ?? l} ×
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <span className="set-value">{t('settings.noTranslations')}</span>
+                )}
+              </div>
+              <p className="set-hint">
+                {t('settings.translationsHint')} {t('settings.addLangHint')} <code>mdrules translate</code>
+              </p>
+            </section>
+          )}
+
+          {section === 'proposals' && (
+            <section>
+              <div className="set-title">{t('settings.proposals')}</div>
+              <p className="set-hint">{t('settings.proposalsHint')}</p>
+              <div className="set-row">
+                <span className="set-label">{t('settings.layout')}</span>
+                <div className="segmented">
+                  {(['general', 'structured'] as const).map((l) => (
+                    <button
+                      key={l}
+                      className={layout === l ? 'active' : ''}
+                      onClick={() => {
+                        setLayout(l)
+                        if (info.proposals.active) onProposals(true, l)
+                      }}
+                    >
+                      {l === 'general' ? t('settings.layoutGeneral') : t('settings.layoutStructured')}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="set-row">
+                <span className="set-label">{info.proposals.active ? t('settings.proposalsOn') : t('settings.proposalsOff')}</span>
+                <button className={`btn${info.proposals.active ? '' : ' primary'}`} onClick={() => onProposals(!info.proposals.active, layout)}>
+                  {info.proposals.active ? t('settings.deactivate') : t('settings.activate')}
+                </button>
+              </div>
+              <p className="set-hint">{t('settings.proposalsFiles')}</p>
+            </section>
+          )}
+        </div>
       </div>
     </div>
   )

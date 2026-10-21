@@ -2,7 +2,7 @@ import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirro
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
 import { languages } from '@codemirror/language-data'
-import { highlightSelectionMatches, search, searchKeymap } from '@codemirror/search'
+import { highlightSelectionMatches } from '@codemirror/search'
 import { Annotation, Compartment, type Extension } from '@codemirror/state'
 import { drawSelection, EditorView, keymap } from '@codemirror/view'
 import { tags as t } from '@lezer/highlight'
@@ -13,6 +13,7 @@ import { commentAuthor } from './comments'
 import { docPath, livePreview, translator } from './livePreview'
 import { formatBar } from './formatBar'
 import { pasteTable } from './pasteTable'
+import { searchPanel } from './searchPanel'
 import { slashMenu } from './slashMenu'
 import { taskHint } from './taskHint'
 import { setWidgetTranslate } from './widgets'
@@ -71,7 +72,7 @@ export function editorExtensions(translate: T, path: string, wrap: boolean, auth
   return [
     history(),
     drawSelection(),
-    search({ top: true }),
+    searchPanel(),
     highlightSelectionMatches(),
     wrapping.of(wrap ? EditorView.lineWrapping : []),
     markdown({ base: markdownLanguage, codeLanguages: languages, extensions: [Frontmatter, MathSyntax, Footnotes] }),
@@ -85,7 +86,7 @@ export function editorExtensions(translate: T, path: string, wrap: boolean, auth
     taskHint(translate),
     formatBar(translate),
     pasteTable(translate),
-    keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap, indentWithTab]),
+    keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
     EditorView.updateListener.of((u) => {
       if (u.docChanged && u.transactions.some((tr) => !tr.annotation(externalChange))) onChange(u.state.doc.toString())
     }),

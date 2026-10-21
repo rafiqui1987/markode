@@ -80,9 +80,11 @@ export interface EditorSettings {
   width: 'full' | 'readable'
   /** Wrap long lines; when false, long lines and wide tables scroll horizontally. */
   wrap: boolean
+  /** Language of mdrules' own menus; independent of the language the docs are written in. */
+  uiLang: string
 }
 
-export const DEFAULT_SETTINGS: EditorSettings = { font: 'inter', size: 15, lineHeight: 1.65, padding: 28, width: 'full', wrap: true }
+export const DEFAULT_SETTINGS: EditorSettings = { font: 'inter', size: 15, lineHeight: 1.65, padding: 28, width: 'full', wrap: true, uiLang: 'en' }
 const settingsFile = () => path.join(GLOBAL_DIR, 'settings.json')
 
 export function readSettings(): EditorSettings {

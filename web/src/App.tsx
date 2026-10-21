@@ -3,14 +3,12 @@ import { type CSSProperties, type PointerEvent as ReactPointerEvent, useCallback
 import { api, type EditorSettings, type ProposalLayout, type FileData, type Info, type Lang, LANG_NAMES, type SyncStatus, subscribe, type TreeData, type TreeNode } from './api'
 import { type EditHistory, Editor, type EditorCommands, NO_HISTORY } from './components/Editor'
 import { Changes, Dashboard, ProposalBanner, Rules, StatusChip } from './components/Pages'
-import { applySettings, DEFAULT_SETTINGS, Settings } from './components/Settings'
+import { applySettings, DEFAULT_SETTINGS, Settings, type SettingsSection, type Theme } from './components/Settings'
 import { Sidebar } from './components/Sidebar'
 import { Skills } from './components/Skills'
 import { makeT } from './i18n'
 
 type View = 'editor' | 'dashboard' | 'changes' | 'rules' | 'skills'
-/** null follows the system until the user picks one with the toggle. */
-type Theme = 'light' | 'dark' | null
 
 const store = {
   get: (k: string) => {
@@ -82,8 +80,9 @@ export function App() {
   const [saving, setSaving] = useState(false)
   const [tick, setTick] = useState(0)
   const [fileTick, setFileTick] = useState(0)
-  const [settings, setSettings] = useState<EditorSettings>(DEFAULT_SETTINGS)
-  const [settingsOpen, setSettingsOpen] = useState(false)
+  // The UI language is cached locally too, so the menus don't flash in English while settings load.
+  const [settings, setSettings] = useState<EditorSettings>(() => ({ ...DEFAULT_SETTINGS, uiLang: store.get('mdrules.uiLang') || DEFAULT_SETTINGS.uiLang }))
+  const [settingsOpen, setSettingsOpen] = useState<SettingsSection | null>(null)
   /** Set once the user sends their answer to a proposal, until another file opens. */
   const [answered, setAnswered] = useState<string | null>(null)
   const [editHistory, setEditHistory] = useState<EditHistory>(NO_HISTORY)
@@ -93,11 +92,12 @@ export function App() {
   const [storedLang, setStoredLang] = useState<string | null>(() => store.get('mdrules.viewLang'))
   const resolvedTheme = useResolvedTheme(theme)
 
-  // The language being viewed: the source one, or an enabled translation. It also drives the UI language.
+  // The language the docs are viewed in: the source one, or an enabled translation.
   const sourceLang = info?.sourceLang ?? 'en'
   const viewLang: string = storedLang && info?.langs.includes(storedLang) ? storedLang : sourceLang
   const nameOf = (code: string) => info?.langNames[code] ?? LANG_NAMES[code as Lang] ?? code
-  const t = useMemo(() => makeT(viewLang), [viewLang])
+  // The menus' language is a setting of its own, independent of the docs' one.
+  const t = useMemo(() => makeT(settings.uiLang), [settings.uiLang])
   const viewLangRef = useRef(viewLang)
   viewLangRef.current = viewLang
   const refreshTree = useCallback(() => api.tree(viewLangRef.current).then(setData), [])
@@ -115,6 +115,7 @@ export function App() {
     if (info) refreshTree()
   }, [info, viewLang])
   useEffect(() => applySettings(settings), [settings])
+  useEffect(() => store.set('mdrules.uiLang', settings.uiLang), [settings.uiLang])
   useEffect(() => {
     document.documentElement.lang = viewLang
   }, [viewLang])
@@ -156,9 +157,7 @@ export function App() {
     if (selected) history.replaceState(null, '', `#/${encodeURI(selected)}`)
   }, [selected])
   useEffect(() => store.set('mdrules.view', view), [view])
-  useEffect(() => {
-    if (theme) store.set('mdrules.theme', theme)
-  }, [theme])
+  useEffect(() => store.set('mdrules.theme', theme ?? ''), [theme])
   useEffect(() => store.set('mdrules.sidebarWidth', String(sidebarWidth)), [sidebarWidth])
   useEffect(() => store.set('mdrules.sidebarHidden', sidebarHidden ? '1' : '0'), [sidebarHidden])
 
@@ -286,7 +285,7 @@ export function App() {
             ))}
           </select>
         )}
-        <button className="icon-btn" title={t('app.settings')} onClick={() => setSettingsOpen(true)}>
+        <button className="icon-btn" title={t('app.settings')} onClick={() => setSettingsOpen('general')}>
           <SettingsIcon size={16} />
         </button>
         <button className="icon-btn" title={t('app.theme')} onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}>
@@ -363,7 +362,7 @@ export function App() {
                 </div>
               )}
               <Editor
-                key={`${selected}|${viewLang}|${commentAs}`}
+                key={`${selected}|${viewLang}|${commentAs}|${settings.uiLang}`}
                 path={selected}
                 lang={viewLang}
                 layoutKey={layoutKey}
@@ -385,13 +384,13 @@ export function App() {
           ) : (
             <div className="empty">{t('app.noFile')}</div>
           ))}
-        {view === 'dashboard' && <Dashboard t={t} tick={tick} onOpen={open} proposalsActive={!!info?.proposals.active} onActivateProposals={() => setSettingsOpen(true)} />}
+        {view === 'dashboard' && <Dashboard t={t} tick={tick} onOpen={open} proposalsActive={!!info?.proposals.active} onActivateProposals={() => setSettingsOpen('proposals')} />}
         {view === 'changes' && <Changes t={t} git={data.git} enabled={!!info?.git} tick={tick} />}
         {view === 'rules' && <Rules t={t} />}
         {view === 'skills' && <Skills t={t} tick={tick} look={{ layoutKey, wrap: settings.wrap, theme: resolvedTheme }} />}
       </main>
 
-      {settingsOpen && info && <Settings t={t} info={info} settings={settings} onSettings={changeSettings} onLanguages={changeLanguages} onProposals={changeProposals} onClose={() => setSettingsOpen(false)} />}
+      {settingsOpen && info && <Settings t={t} section={settingsOpen} theme={theme} onTheme={setTheme} info={info} settings={settings} onSettings={changeSettings} onLanguages={changeLanguages} onProposals={changeProposals} onClose={() => setSettingsOpen(null)} />}
     </div>
   )
 }
