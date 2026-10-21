@@ -15,6 +15,8 @@ export interface ProjectConfig {
   mainDoc: string | null
   /** Translation languages enabled for this user. */
   langs: Lang[]
+  /** Specs and planning structure chosen at init (see core/sdd.ts). */
+  workflow?: 'none' | 'mdrules' | 'openspec' | 'speckit'
   initializedAt?: string
 }
 
@@ -39,7 +41,7 @@ export function readConfig(root: string): ProjectConfig | null {
     const raw = JSON.parse(fs.readFileSync(configFile(root), 'utf8'))
     // v0.1 stored a single `lang`.
     const langs = Array.isArray(raw.langs) ? raw.langs : raw.lang ? [raw.lang] : []
-    return { mainDoc: raw.mainDoc ?? null, langs: langs.filter(isLang), initializedAt: raw.initializedAt }
+    return { mainDoc: raw.mainDoc ?? null, langs: langs.filter(isLang), workflow: raw.workflow, initializedAt: raw.initializedAt }
   } catch {
     return null
   }

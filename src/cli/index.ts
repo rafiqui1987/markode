@@ -7,7 +7,7 @@ const HELP = `mdrules — visual editor for your project's Markdown
 
 Usage
   mdrules                 init if needed, then open the editor
-  mdrules init            (re)run the setup: main doc, docs/, rules, language
+  mdrules init            (re)run the setup: main doc, specs structure, rules, languages
   mdrules serve           open the editor without running init
   mdrules sync --status [--json]                    translations + files not in the source language
   mdrules sync --mark [--lang xx] <path...>|--all   record translations as in sync

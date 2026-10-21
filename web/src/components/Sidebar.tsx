@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, Copy, Eye, EyeOff, FilePlus, FileText, Folder, FolderOpen, Package, Redo2, Search, Trash2, Undo2, X } from 'lucide-react'
+import { ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, Copy, Eye, EyeOff, FilePlus, FileText, Folder, FolderOpen, FolderPlus, Package, Search, Trash2, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { type GitStatus, type Lang, LANG_NAMES, type SyncStatus, type TreeNode } from '../api'
 import type { T } from '../i18n'
@@ -15,12 +15,9 @@ interface Props {
   onOpen: (path: string) => void
   onToggleIgnored: () => void
   onIgnore: (node: TreeNode, ignored: boolean) => void
-  onCreate: (dir: string) => void
+  /** Resolves to the created path, or null when it failed. */
+  onCreate: (dir: string, name: string, kind: TreeNode['kind']) => Promise<string | null>
   onDelete: (node: TreeNode) => void
-  /** Undo/redo steps of the open file; the buttons only show once there is something to undo. */
-  history: { undo: number; redo: number }
-  onUndo: () => void
-  onRedo: () => void
 }
 
 const EXPANDED_KEY = 'mdrules.expanded'
@@ -45,6 +42,36 @@ function filterTree(nodes: TreeNode[], query: string): TreeNode[] {
   })
 }
 
+/** The folder a new item goes into when created from `node` (itself, or the folder holding it). */
+const targetDir = (node: Pick<TreeNode, 'kind' | 'path'> | null) => (!node ? '' : node.kind === 'dir' ? node.path : node.path.split('/').slice(0, -1).join('/'))
+
+/** Inline name box for a new file or folder, as in VS Code: Enter or leaving it creates, Escape cancels. */
+function DraftRow({ kind, depth, onDone }: { kind: TreeNode['kind']; depth: number; onDone: (name: string | null) => void }) {
+  const done = useRef(false)
+  const finish = (name: string | null) => {
+    if (done.current) return
+    done.current = true
+    onDone(name?.trim().replace(/^\/+|\/+$/g, '') || null)
+  }
+  return (
+    <li>
+      <div className="node draft" style={{ paddingLeft: 6 + depth * 12 }}>
+        <span className="chev" />
+        <span className="ico">{kind === 'dir' ? <Folder size={15} /> : <FileText size={15} />}</span>
+        <input
+          autoFocus
+          spellCheck={false}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') finish(e.currentTarget.value)
+            if (e.key === 'Escape') finish(null)
+          }}
+          onBlur={(e) => finish(e.currentTarget.value)}
+        />
+      </div>
+    </li>
+  )
+}
+
 /** A folder shows a git badge when anything inside it changed. */
 function dirHasChanges(node: TreeNode, git: Record<string, GitStatus>): boolean {
   return Object.keys(git).some((p) => p.startsWith(node.path + '/'))
@@ -57,6 +84,10 @@ export function Sidebar(props: Props) {
   const [searching, setSearching] = useState(false)
   const [query, setQuery] = useState('')
   const searchInput = useRef<HTMLInputElement>(null)
+  const [draft, setDraft] = useState<{ dir: string; kind: TreeNode['kind'] } | null>(null)
+  // Last clicked item, as in VS Code: the header's "new" buttons create next to it (or inside, for a folder).
+  const [focused, setFocused] = useState<Pick<TreeNode, 'kind' | 'path'> | null>(null)
+  const selectedNode = focused ?? (selected ? { kind: 'file' as const, path: selected } : null)
   const q = query.trim().toLowerCase()
   const visible = useMemo(() => (q ? filterTree(tree, q) : tree), [tree, q])
   const anyExpanded = expanded.size > 0
@@ -91,6 +122,23 @@ export function Sidebar(props: Props) {
     }
   }, [menu])
 
+  const startCreate = (dir: string, kind: TreeNode['kind']) => {
+    closeSearch()
+    const parts = dir ? dir.split('/') : []
+    setExpanded((s) => new Set([...s, ...parts.map((_, i) => parts.slice(0, i + 1).join('/'))]))
+    setDraft({ dir, kind })
+  }
+
+  const finishCreate = async (name: string | null) => {
+    const d = draft
+    setDraft(null)
+    if (!d || !name) return
+    const created = await props.onCreate(d.dir, name, d.kind)
+    if (created && d.kind === 'dir') setExpanded((s) => new Set([...s, created]))
+  }
+
+  const draftRow = (dir: string, depth: number) => draft?.dir === dir && <DraftRow key="draft" kind={draft.kind} depth={depth} onDone={finishCreate} />
+
   const toggle = (path: string) =>
     setExpanded((s) => {
       const n = new Set(s)
@@ -114,7 +162,10 @@ export function Sidebar(props: Props) {
               className={`node${selected === n.path ? ' selected' : ''}${n.ignored ? ' ignored' : ''}`}
               style={{ paddingLeft: 6 + depth * 12 }}
               title={n.path}
-              onClick={() => (n.kind === 'dir' ? toggle(n.path) : props.onOpen(n.path))}
+              onClick={() => {
+                setFocused(n)
+                n.kind === 'dir' ? toggle(n.path) : props.onOpen(n.path)
+              }}
               onContextMenu={(e) => {
                 e.preventDefault()
                 setMenu({ x: e.clientX, y: e.clientY, node: n })
@@ -133,7 +184,12 @@ export function Sidebar(props: Props) {
               {sync && sync !== 'synced' && <span className={`dot sync-${sync}`} title={t(`sync.${sync}`)} />}
               {git && <span className={`badge git-${git}`} title={t(`git.${git}`)}>{n.kind === 'dir' ? '•' : git}</span>}
             </div>
-            {n.kind === 'dir' && open && <ul>{render(n.children ?? [], depth + 1)}</ul>}
+            {n.kind === 'dir' && open && (
+              <ul>
+                {draftRow(n.path, depth + 1)}
+                {render(n.children ?? [], depth + 1)}
+              </ul>
+            )}
           </li>
         )
       })
@@ -147,8 +203,11 @@ export function Sidebar(props: Props) {
     }}>
       <div className="sidebar-head">
         <span style={{ flex: 1 }}>{t('app.files')}</span>
-        <button className="icon-btn" title={t('app.newFile')} onClick={() => props.onCreate('')}>
+        <button className="icon-btn" title={t('app.newFile')} onClick={() => startCreate(targetDir(selectedNode), 'file')}>
           <FilePlus size={15} />
+        </button>
+        <button className="icon-btn" title={t('app.newFolder')} onClick={() => startCreate(targetDir(selectedNode), 'dir')}>
+          <FolderPlus size={15} />
         </button>
         <button className="icon-btn" title={t('app.showIgnored')} onClick={props.onToggleIgnored} style={showIgnored ? { color: 'var(--accent)' } : undefined}>
           {showIgnored ? <Eye size={15} /> : <EyeOff size={15} />}
@@ -183,29 +242,29 @@ export function Sidebar(props: Props) {
           )}
         </div>
       )}
-      <ul className="tree">{render(visible, 0)}</ul>
+      <ul className="tree">
+        {draftRow('', 0)}
+        {render(visible, 0)}
+      </ul>
       {q && !visible.length && <div className="sidebar-empty">{t('app.noResults')}</div>}
-      {(props.history.undo > 0 || props.history.redo > 0) && (
-        <div className="sidebar-foot">
-          <button className="icon-btn" title={t('app.undo')} disabled={!props.history.undo} onMouseDown={(e) => e.preventDefault()} onClick={props.onUndo}>
-            <Undo2 size={15} />
-          </button>
-          <button className="icon-btn" title={t('app.redo')} disabled={!props.history.redo} onMouseDown={(e) => e.preventDefault()} onClick={props.onRedo}>
-            <Redo2 size={15} />
-          </button>
-        </div>
-      )}
 
       {menu && (
         <div className="ctx-menu" style={{ left: menu.x, top: menu.y }} onClick={(e) => e.stopPropagation()}>
           <button
             onClick={() => {
-              const n = menu.node
-              props.onCreate(n ? (n.kind === 'dir' ? n.path : n.path.split('/').slice(0, -1).join('/')) : '')
+              startCreate(targetDir(menu.node), 'file')
               setMenu(null)
             }}
           >
             <FilePlus size={14} /> {t('app.newFile')}
+          </button>
+          <button
+            onClick={() => {
+              startCreate(targetDir(menu.node), 'dir')
+              setMenu(null)
+            }}
+          >
+            <FolderPlus size={14} /> {t('app.newFolder')}
           </button>
           {menu.node && (
             <>

@@ -5,6 +5,7 @@ import pc from 'picocolors'
 import { type Lang, LANG_NAMES, LANGS, MAIN_DOCS, type ProjectConfig, readConfig, writeConfig } from '../core/config.js'
 import { appliedRuleIds, applyRulesToFile, listRules, sourceLangOf } from '../core/rules.js'
 import { createMainDoc, ensureGitignore, hideInVsCode, installSkill, scaffoldDocs } from '../core/scaffold.js'
+import { applyWorkflowToFile, detectWorkflow, hasUv, installWorkflow, SDD_AGENTS, type SddAgent, type Workflow } from '../core/sdd.js'
 import { findSubprojects, scanTree } from '../core/scan.js'
 
 function check<T>(value: T): Exclude<T, symbol> {
@@ -50,6 +51,71 @@ async function chooseMainDoc(root: string): Promise<string> {
   return choice
 }
 
+const WORKFLOW_LABEL: Record<Workflow, string> = { none: 'None', mdrules: 'mdrules', openspec: 'OpenSpec', speckit: 'GitHub Spec Kit' }
+const WORKFLOW_GUIDE: Record<Workflow, string> = { none: '', mdrules: 'docs/README.md', openspec: 'openspec/README.md', speckit: 'specs/README.md' }
+
+/** Ask for the specs and planning structure and create it; an existing OpenSpec or Spec Kit setup is kept as is. */
+async function chooseWorkflow(root: string, mainDoc: string, previous: Workflow | undefined): Promise<Workflow> {
+  const detected = detectWorkflow(root)
+  if (detected) {
+    p.log.info(`${WORKFLOW_LABEL[detected]} found: mdrules shows it in the dashboard.`)
+    return detected
+  }
+  for (;;) {
+    const choice = check(
+      await p.select<Workflow>({
+        message: 'Create a base structure for specs and planning?',
+        options: [
+          { value: 'none', label: 'None' },
+          { value: 'mdrules', label: 'mdrules', hint: 'docs/ with phases, tasks, decisions and examples' },
+          { value: 'openspec', label: 'OpenSpec', hint: 'specs + proposed changes, good for existing projects' },
+          { value: 'speckit', label: 'GitHub Spec Kit', hint: 'constitution → spec → plan → tasks, per feature' },
+        ],
+        initialValue: previous ?? 'none',
+      }),
+    )
+    if (choice === 'none') return choice
+    if (choice === 'mdrules') {
+      const created = scaffoldDocs(root)
+      if (created.length) p.log.success(`Created ${created.join(', ')}`)
+      return choice
+    }
+
+    let official = true
+    if (choice === 'speckit' && !hasUv()) {
+      const next = check(
+        await p.select({
+          message: 'Spec Kit needs uv (Python) to install its AI commands, and uv was not found.',
+          options: [
+            { value: 'back', label: 'Choose another option' },
+            { value: 'skeleton', label: 'Create the structure only', hint: 'the guide explains how to install Spec Kit later' },
+          ],
+        }),
+      )
+      if (next === 'back') continue
+      official = false
+    }
+
+    const initial: SddAgent = mainDoc === 'AGENTS.md' ? 'codex' : 'claude'
+    const agentOptions = (Object.keys(SDD_AGENTS) as SddAgent[]).map((a) => ({ value: a, label: SDD_AGENTS[a].label }))
+    // Spec Kit sets up one agent at init; OpenSpec any number.
+    const agents: SddAgent[] = !official
+      ? [initial]
+      : choice === 'openspec'
+        ? check(await p.multiselect({ message: 'Install the OpenSpec commands for which agents?', options: agentOptions, initialValues: [initial], required: false }))
+        : [check(await p.select({ message: 'Install the Spec Kit commands for which agent?', options: agentOptions, initialValue: initial }))]
+
+    const spin = p.spinner()
+    spin.start(official ? `Installing ${WORKFLOW_LABEL[choice]}…` : 'Creating the structure…')
+    const res = installWorkflow(root, choice, agents, official)
+    spin.stop(res.official ? `${WORKFLOW_LABEL[choice]} installed` : 'Structure created')
+    if (official && !res.official) p.log.warn(`Couldn't run the ${WORKFLOW_LABEL[choice]} installer:\n${pc.dim(res.error ?? '')}\nCreated the structure only.`)
+    if (!res.official) p.log.info(`To add the AI commands later, see ${pc.cyan(WORKFLOW_GUIDE[choice])}.`)
+    if (res.ignored.length) p.log.info(`Agent commands hidden in mdrules (${res.ignored.length} folders); the eye button in the sidebar shows them.`)
+    return choice
+  }
+}
+
 export async function runInit(root: string): Promise<ProjectConfig> {
   p.intro(pc.bgCyan(pc.black(' mdrules ')))
   const previous = readConfig(root)
@@ -57,10 +123,8 @@ export async function runInit(root: string): Promise<ProjectConfig> {
   const mainDoc = await chooseMainDoc(root)
   const mainFile = path.join(root, mainDoc)
 
-  if (!fs.existsSync(path.join(root, 'docs'))) {
-    const create = check(await p.confirm({ message: 'Create the base /docs structure?', initialValue: true }))
-    if (create) p.log.success(`Created ${scaffoldDocs(root).join(', ')}`)
-  }
+  const workflow = await chooseWorkflow(root, mainDoc, previous?.workflow)
+  applyWorkflowToFile(mainFile, workflow)
 
   const mainText = fs.readFileSync(mainFile, 'utf8')
   const sourceLang = check(
@@ -114,7 +178,7 @@ export async function runInit(root: string): Promise<ProjectConfig> {
   }
   installSkill(root)
 
-  const config: ProjectConfig = { mainDoc, langs, initializedAt: previous?.initializedAt ?? new Date().toISOString() }
+  const config: ProjectConfig = { mainDoc, langs, workflow, initializedAt: previous?.initializedAt ?? new Date().toISOString() }
   writeConfig(root, config)
   p.outro(`Ready. Skill installed in ${pc.cyan('.claude/skills/mdrules')}`)
   return config

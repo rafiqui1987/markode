@@ -59,7 +59,7 @@ export function watchSkips(root: string): (rel: string, isDir?: boolean) => bool
   }
 }
 
-/** Tree of every .md file under root; folders without .md files are pruned. */
+/** Tree of every .md file under root; folders without .md files are pruned, except empty ones (just created). */
 export function scanTree(root: string): TreeNode[] {
   const gitIgnore = loadIgnore(root, '.gitignore')
   const mdIgnore = loadIgnore(root, IGNORE_FILE)
@@ -80,7 +80,7 @@ export function scanTree(root: string): TreeNode[] {
         if (gitIgnore.ignores(rel + '/')) continue
         const ignored = parentIgnored || mdIgnore.ignores(rel + '/')
         const children = walk(abs, ignored)
-        if (!children.length) continue
+        if (!children.length && !isEmptyDir(abs)) continue
         const project = MAIN_DOCS.some((d) => children.some((c) => c.kind === 'file' && c.name === d))
         nodes.push({ name: e.name, path: rel, kind: 'dir', project: project || undefined, ignored: ignored || undefined, children })
       } else if (e.isFile() && e.name.toLowerCase().endsWith('.md')) {
@@ -95,10 +95,19 @@ export function scanTree(root: string): TreeNode[] {
   return walk(root, false)
 }
 
-/** Main docs first, then folders, then files — alphabetical inside each group. */
+function isEmptyDir(abs: string) {
+  try {
+    return fs.readdirSync(abs).length === 0
+  } catch {
+    return false
+  }
+}
+
+const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })
+
+/** Folders first, then files, as in a file manager; natural order inside each group (2 before 10, case-insensitive). */
 function compareNodes(a: TreeNode, b: TreeNode) {
-  const rank = (n: TreeNode) => (n.kind === 'file' && (MAIN_DOCS as readonly string[]).includes(n.name) ? 0 : n.kind === 'dir' ? 1 : 2)
-  return rank(a) - rank(b) || a.name.localeCompare(b.name)
+  return (a.kind === 'dir' ? 0 : 1) - (b.kind === 'dir' ? 0 : 1) || collator.compare(a.name, b.name)
 }
 
 export function flattenFiles(nodes: TreeNode[], includeIgnored = false): TreeNode[] {

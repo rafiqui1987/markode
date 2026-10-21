@@ -1,13 +1,14 @@
-import { ChevronRight, FileText, GitCompare, LayoutDashboard, Moon, ScrollText, Settings as SettingsIcon, Sun } from 'lucide-react'
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { ChevronRight, FileText, GitCompare, LayoutDashboard, Moon, PanelLeftClose, PanelLeftOpen, Redo2, RotateCcw, ScrollText, Settings as SettingsIcon, Sparkles, Sun, Undo2 } from 'lucide-react'
+import { type CSSProperties, type PointerEvent as ReactPointerEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { api, type EditorSettings, type FileData, type Info, type Lang, LANG_NAMES, type SyncStatus, subscribe, type TreeData, type TreeNode } from './api'
-import { Editor } from './components/Editor'
+import { type EditHistory, Editor, type EditorCommands, NO_HISTORY } from './components/Editor'
 import { Changes, Dashboard, Rules, StatusChip } from './components/Pages'
 import { applySettings, DEFAULT_SETTINGS, Settings } from './components/Settings'
 import { Sidebar } from './components/Sidebar'
+import { Skills } from './components/Skills'
 import { makeT } from './i18n'
 
-type View = 'editor' | 'dashboard' | 'changes' | 'rules'
+type View = 'editor' | 'dashboard' | 'changes' | 'rules' | 'skills'
 /** null follows the system until the user picks one with the toggle. */
 type Theme = 'light' | 'dark' | null
 
@@ -42,6 +43,10 @@ function useResolvedTheme(theme: Theme): 'light' | 'dark' {
   return resolved
 }
 
+const SIDEBAR_DEFAULT = 260
+const SIDEBAR_MIN = 180
+const sidebarMax = () => Math.max(SIDEBAR_MIN, Math.min(640, window.innerWidth * 0.6))
+
 const statusOf = (content: string) => {
   const fm = /^---\r?\n([\s\S]*?)\r?\n---/.exec(content)?.[1] ?? ''
   return /^status:\s*([\w-]+)/m.exec(fm)?.[1] ?? null
@@ -63,8 +68,10 @@ export function App() {
   const [fileTick, setFileTick] = useState(0)
   const [settings, setSettings] = useState<EditorSettings>(DEFAULT_SETTINGS)
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [editHistory, setEditHistory] = useState({ undo: 0, redo: 0 })
-  const editorCommands = useRef<{ undo: () => void; redo: () => void } | null>(null)
+  const [editHistory, setEditHistory] = useState<EditHistory>(NO_HISTORY)
+  const editorCommands = useRef<EditorCommands | null>(null)
+  const [sidebarWidth, setSidebarWidth] = useState(() => Number(store.get('mdrules.sidebarWidth')) || SIDEBAR_DEFAULT)
+  const [sidebarHidden, setSidebarHidden] = useState(() => store.get('mdrules.sidebarHidden') === '1')
   const [storedLang, setStoredLang] = useState<Lang | null>(() => store.get('mdrules.viewLang') as Lang | null)
   const resolvedTheme = useResolvedTheme(theme)
 
@@ -133,6 +140,32 @@ export function App() {
   useEffect(() => {
     if (theme) store.set('mdrules.theme', theme)
   }, [theme])
+  useEffect(() => store.set('mdrules.sidebarWidth', String(sidebarWidth)), [sidebarWidth])
+  useEffect(() => store.set('mdrules.sidebarHidden', sidebarHidden ? '1' : '0'), [sidebarHidden])
+
+  // Drag the sidebar's edge to resize it; dragging it almost shut hides it.
+  const startResize = (e: ReactPointerEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    const handle = e.currentTarget
+    handle.setPointerCapture(e.pointerId)
+    document.body.classList.add('resizing')
+    const startWidth = sidebarWidth
+    const move = (ev: PointerEvent) => {
+      // Hidden this way, it comes back at the width it had before the drag.
+      if (ev.clientX < SIDEBAR_MIN / 2) return setSidebarHidden(true), setSidebarWidth(startWidth)
+      setSidebarHidden(false)
+      setSidebarWidth(Math.round(Math.min(sidebarMax(), Math.max(SIDEBAR_MIN, ev.clientX))))
+    }
+    const up = () => {
+      document.body.classList.remove('resizing')
+      handle.removeEventListener('pointermove', move)
+      handle.removeEventListener('pointerup', up)
+      handle.removeEventListener('pointercancel', up)
+    }
+    handle.addEventListener('pointermove', move)
+    handle.addEventListener('pointerup', up)
+    handle.addEventListener('pointercancel', up)
+  }
 
   const open = (path: string) => {
     setSelected(path)
@@ -149,15 +182,14 @@ export function App() {
     setInfo(await api.info())
   }
 
-  const create = async (dir: string) => {
-    let name = prompt(t('app.newFilePrompt'), 'new-doc.md')?.trim()
-    if (!name) return
-    if (!name.toLowerCase().endsWith('.md')) name += '.md'
-    const res = await api.create(dir ? `${dir}/${name}` : name).catch((e) => alert(e.message))
-    if (res) {
-      await refreshTree()
-      open(res.path)
-    }
+  const create = async (dir: string, name: string, kind: TreeNode['kind']) => {
+    if (kind === 'file' && !name.toLowerCase().endsWith('.md')) name += '.md'
+    const rel = dir ? `${dir}/${name}` : name
+    const res = await (kind === 'dir' ? api.createDir(rel) : api.create(rel)).catch((e) => void alert(e.message))
+    if (!res) return null
+    await refreshTree()
+    if (kind === 'file') open(res.path)
+    return res.path
   }
 
   const remove = async (node: TreeNode) => {
@@ -178,6 +210,7 @@ export function App() {
   const pendingCount = Object.values(data.sync).filter((s) => s === 'pending-sync' || s === 'conflict').length
   const status: SyncStatus | null = file?.status ?? null
   const crumbs = selected?.split('/') ?? []
+  const layoutKey = `${settings.font}|${settings.size}|${settings.lineHeight}|${settings.padding}|${settings.width}`
 
   const ThemeIcon = resolvedTheme === 'light' ? Sun : Moon
   const tabs: { id: View; icon: typeof FileText; label: string }[] = [
@@ -185,11 +218,15 @@ export function App() {
     { id: 'dashboard', icon: LayoutDashboard, label: t('view.dashboard') },
     { id: 'changes', icon: GitCompare, label: t('view.changes') },
     { id: 'rules', icon: ScrollText, label: t('view.rules') },
+    { id: 'skills', icon: Sparkles, label: t('view.skills') },
   ]
 
   return (
-    <div className="app">
+    <div className="app" data-sidebar={sidebarHidden ? 'hidden' : undefined} style={{ '--sidebar-w': `${Math.min(sidebarWidth, sidebarMax())}px` } as CSSProperties}>
       <header className="topbar">
+        <button className="icon-btn" title={sidebarHidden ? t('app.showSidebar') : t('app.hideSidebar')} onClick={() => setSidebarHidden((h) => !h)}>
+          {sidebarHidden ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+        </button>
         <div className="brand">
           mdrules <small>{info?.name}</small>
         </div>
@@ -240,16 +277,26 @@ export function App() {
         }}
         onCreate={create}
         onDelete={remove}
-        history={view === 'editor' ? editHistory : { undo: 0, redo: 0 }}
-        onUndo={() => editorCommands.current?.undo()}
-        onRedo={() => editorCommands.current?.redo()}
       />
+      {!sidebarHidden && <div className="sidebar-resizer" title={t('app.resizeSidebar')} onPointerDown={startResize} onDoubleClick={() => setSidebarWidth(SIDEBAR_DEFAULT)} />}
 
       <main className="main">
         {view === 'editor' &&
           (selected ? (
             <>
               <div className="crumbs">
+                <div className="edit-actions">
+                  {/* preventDefault keeps the focus (and the selection) in the editor. */}
+                  <button className="icon-btn" title={t('app.undo')} disabled={!editHistory.undo} onMouseDown={(e) => e.preventDefault()} onClick={() => editorCommands.current?.undo()}>
+                    <Undo2 size={15} />
+                  </button>
+                  <button className="icon-btn" title={t('app.redo')} disabled={!editHistory.redo} onMouseDown={(e) => e.preventDefault()} onClick={() => editorCommands.current?.redo()}>
+                    <Redo2 size={15} />
+                  </button>
+                  <button className="icon-btn" title={t('app.discard')} disabled={!editHistory.dirty} onMouseDown={(e) => e.preventDefault()} onClick={() => editorCommands.current?.discard()}>
+                    <RotateCcw size={15} />
+                  </button>
+                </div>
                 {crumbs.map((c, i) => (
                   <span key={i} style={{ display: 'contents' }}>
                     {i > 0 && <ChevronRight size={13} className="sep" />}
@@ -282,7 +329,7 @@ export function App() {
                 key={`${selected}|${viewLang}`}
                 path={selected}
                 lang={viewLang}
-                layoutKey={`${settings.font}|${settings.size}|${settings.lineHeight}|${settings.padding}|${settings.width}`}
+                layoutKey={layoutKey}
                 wrap={settings.wrap}
                 theme={resolvedTheme}
                 t={t}
@@ -303,6 +350,7 @@ export function App() {
         {view === 'dashboard' && <Dashboard t={t} tick={tick} onOpen={open} />}
         {view === 'changes' && <Changes t={t} git={data.git} enabled={!!info?.git} tick={tick} />}
         {view === 'rules' && <Rules t={t} />}
+        {view === 'skills' && <Skills t={t} tick={tick} look={{ layoutKey, wrap: settings.wrap, theme: resolvedTheme }} />}
       </main>
 
       {settingsOpen && info && <Settings t={t} info={info} settings={settings} onSettings={changeSettings} onLanguages={changeLanguages} onClose={() => setSettingsOpen(false)} />}

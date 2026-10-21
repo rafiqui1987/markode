@@ -8,7 +8,7 @@ function fill(text: string, vars: Record<string, string>) {
   return text.replace(/\{\{(\w+)\}\}/g, (_, k) => vars[k] ?? '')
 }
 
-function copyTree(src: string, dest: string, vars: Record<string, string>, created: string[], root: string) {
+export function copyTree(src: string, dest: string, vars: Record<string, string>, created: string[], root: string) {
   for (const e of fs.readdirSync(src, { withFileTypes: true })) {
     const from = path.join(src, e.name)
     const to = path.join(dest, e.name)

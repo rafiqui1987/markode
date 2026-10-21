@@ -1,0 +1,12 @@
+schema: spec-driven
+
+# Project context (optional): constraints an agent can't infer from the code.
+# context: |
+#   Designs and tasks must cover Windows, macOS and Linux
+
+# Per-artifact rules (optional).
+# rules:
+#   proposal:
+#     - Always state what is out of scope
+#   tasks:
+#     - Break tasks into chunks of at most 2 hours

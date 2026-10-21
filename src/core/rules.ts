@@ -31,7 +31,7 @@ export function seedRules() {
 
 function parseRule(id: string, text: string): Rule {
   const m = text.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/)
-  const meta = m ? (YAML.parse(m[1]) ?? {}) : {}
+  const meta = m ? (YAML.parse(m[1], { logLevel: 'error' }) ?? {}) : {}
   return { id, title: meta.title ?? id, body: (m ? m[2] : text).trim() }
 }
 

@@ -56,6 +56,48 @@ export interface DocSummary {
   tasks: { done: number; total: number }
 }
 
+export type SkillSource = 'claude' | 'agents' | 'codex' | 'gemini' | 'copilot' | 'cursor'
+export type ProjectTarget = 'claude' | 'agents'
+export type SkillIssue = 'frontmatter' | 'name' | 'name-dir' | 'description' | 'description-long'
+
+export interface Skill {
+  key: string
+  name: string
+  folder: string
+  description: string
+  locations: { source: SkillSource; path: string }[]
+  managed: boolean
+  files: string[]
+  tags: string[]
+  issues: SkillIssue[]
+  installed: ProjectTarget[]
+}
+
+export interface SkillsData {
+  skills: Skill[]
+  sources: { id: SkillSource; path: string; exists: boolean }[]
+  /** Targets preselected for "add to project", from the agents the project uses. */
+  targets: ProjectTarget[]
+}
+
+export interface Progress {
+  done: number
+  total: number
+}
+
+/** OpenSpec and Spec Kit structures found in the project (see src/core/sdd.ts). */
+export interface SddSummary {
+  openspec?: {
+    changes: { id: string; title: string; path: string; artifacts: { proposal: boolean; design: boolean; tasks: boolean; specs: number }; tasks: Progress }[]
+    specs: { id: string; path: string }[]
+    archived: { id: string; path: string }[]
+  }
+  speckit?: {
+    constitution: { path: string; filled: boolean } | null
+    features: { id: string; title: string; path: string; artifacts: { spec: boolean; plan: boolean; tasks: boolean }; tasks: Progress }[]
+  }
+}
+
 export interface Rule {
   id: string
   title: string
@@ -85,15 +127,21 @@ export const api = {
   file: (path: string, lang: Lang) => call<FileData>('GET', `/api/file?path=${q(path)}&lang=${lang}`),
   save: (path: string, content: string, target: FileData['target'], lang: Lang) => call<{ status: SyncStatus | null }>('PUT', '/api/file', { path, content, target, lang }),
   create: (path: string) => call<{ path: string }>('POST', '/api/file', { path }),
+  createDir: (path: string) => call<{ path: string }>('POST', '/api/dir', { path }),
   deletePreview: (path: string) => call<{ kind: TreeNode['kind']; files: number; md: number }>('GET', `/api/delete-preview?path=${q(path)}`),
   remove: (path: string) => call('DELETE', `/api/path?path=${q(path)}`),
   ignore: (path: string, kind: TreeNode['kind'], ignored: boolean) => call('POST', '/api/ignore', { path, kind, ignored }),
   diff: (path: string) => call<{ diff: string }>('GET', `/api/diff?path=${q(path)}`),
-  dashboard: () => call<{ docs: DocSummary[] }>('GET', '/api/dashboard'),
+  dashboard: () => call<{ docs: DocSummary[]; sdd: SddSummary }>('GET', '/api/dashboard'),
   rules: () => call<{ rules: Rule[]; applied: string[]; mainDoc: string | null }>('GET', '/api/rules'),
   saveRule: (rule: Partial<Rule> & { title: string; body: string }) => call<Rule>('PUT', '/api/rules', rule),
   deleteRule: (id: string) => call('DELETE', `/api/rules?id=${q(id)}`),
   applyRules: (ids: string[]) => call('POST', '/api/rules/apply', { ids }),
+  skills: () => call<SkillsData>('GET', '/api/skills'),
+  setSkillTags: (name: string, tags: string[]) => call<{ tags: string[] }>('PUT', '/api/skills/tags', { name, tags }),
+  skillFile: (key: string) => call<FileData>('GET', `/api/skills/file?key=${q(key)}`),
+  saveSkillFile: (key: string, content: string) => call<{ status: null }>('PUT', '/api/skills/file', { key, content }),
+  installSkill: (key: string, targets: ProjectTarget[], overwrite: boolean) => call('POST', '/api/skills/install', { key, targets, overwrite }),
 }
 
 /** Live file-system events from the server; reconnects on drop. */

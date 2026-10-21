@@ -11,6 +11,8 @@ import { gitDiff, gitStatuses, isGitRepo } from '../core/git.js'
 import { allStatuses, fileStatus, foreignFiles, keepLanguage, translationPath } from '../core/i18n.js'
 import { appliedRuleIds, applyRulesToFile, deleteRule, listRules, projectSourceLang, saveRule } from '../core/rules.js'
 import { scanTree, setIgnored, watchSkips } from '../core/scan.js'
+import { sddPrefixes, summarizeSdd } from '../core/sdd.js'
+import { getSkill, installSkill, listSkills, PROJECT_TARGETS, type ProjectTarget, projectTargets, setSkillTags, skillSources } from '../core/skills.js'
 
 interface Options {
   root: string
@@ -148,6 +150,15 @@ export async function startServer({ root, port, open: openBrowser }: Options) {
       fs.writeFileSync(file, `# ${title.charAt(0).toUpperCase() + title.slice(1)}\n\n`)
       return { ok: true, path: rel }
     },
+    // Only a mkdir: nothing else is touched, so editors that have the project open are unaffected.
+    'POST /api/dir': (_, body) => {
+      if (typeof body.path !== 'string' || !body.path.trim()) throw new HttpError(400, 'Expected a path')
+      const dir = safeResolve(root, body.path)
+      if (dir === root) throw new HttpError(400, 'Expected a path')
+      if (fs.existsSync(dir)) throw new HttpError(409, 'A file or folder with that name already exists')
+      fs.mkdirSync(dir, { recursive: true })
+      return { ok: true, path: toPosix(path.relative(root, dir)) }
+    },
     'GET /api/delete-preview': (url) => {
       const abs = deletable(url.searchParams.get('path'))
       if (!fs.statSync(abs).isDirectory()) return { kind: 'file', files: 1, md: 1 }
@@ -167,7 +178,11 @@ export async function startServer({ root, port, open: openBrowser }: Options) {
       return { ok: true }
     },
     'GET /api/diff': (url) => ({ diff: gitDiff(root, mdPath(url.searchParams.get('path'))) }),
-    'GET /api/dashboard': () => ({ docs: summarize(root) }),
+    'GET /api/dashboard': () => {
+      const sdd = summarizeSdd(root)
+      const shown = sddPrefixes(sdd)
+      return { docs: summarize(root).filter((d) => !shown.some((p) => d.path.startsWith(p))), sdd }
+    },
     'GET /api/rules': () => {
       const mainDoc = readConfig(root)?.mainDoc
       const text = mainDoc && fs.existsSync(path.join(root, mainDoc)) ? fs.readFileSync(path.join(root, mainDoc), 'utf8') : ''
@@ -177,6 +192,29 @@ export async function startServer({ root, port, open: openBrowser }: Options) {
     'DELETE /api/rules': (url) => {
       deleteRule(url.searchParams.get('id') ?? '')
       return { ok: true }
+    },
+    // Global skills: reads and writes are limited to SKILL.md of discovered skill folders.
+    'GET /api/skills': () => ({ skills: listSkills(root), sources: skillSources(), targets: projectTargets(root) }),
+    'PUT /api/skills/tags': (_, body) => {
+      if (typeof body.name !== 'string' || !Array.isArray(body.tags)) throw new HttpError(400, 'Expected name and tags')
+      return { tags: setSkillTags(body.name, body.tags.map(String)) }
+    },
+    'GET /api/skills/file': (url) => {
+      const skill = getSkill(root, url.searchParams.get('key'))
+      return { path: skill.key, content: fs.readFileSync(path.join(skill.key, 'SKILL.md'), 'utf8'), target: 'source', status: null }
+    },
+    'PUT /api/skills/file': (_, body) => {
+      const skill = getSkill(root, body.key)
+      if (skill.managed) throw new HttpError(403, 'This skill is managed by the app that installed it')
+      fs.writeFileSync(path.join(skill.key, 'SKILL.md'), String(body.content ?? ''))
+      return { ok: true, status: null }
+    },
+    'POST /api/skills/install': (_, body) => {
+      const targets = (Array.isArray(body.targets) ? body.targets : []).filter((t: unknown): t is ProjectTarget => typeof t === 'string' && t in PROJECT_TARGETS)
+      if (!targets.length) throw new HttpError(400, 'Expected at least one target')
+      const result = installSkill(root, getSkill(root, body.key), targets, !!body.overwrite)
+      if (result.conflict) throw new HttpError(409, result.conflict.join(', '))
+      return result
     },
     'POST /api/rules/apply': (_, body) => {
       const mainDoc = readConfig(root)?.mainDoc

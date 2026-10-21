@@ -1,6 +1,6 @@
 import { Check, Plus, Save, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { api, type DocSummary, type GitStatus, type Rule } from '../api'
+import { api, type DocSummary, type GitStatus, type Progress, type Rule, type SddSummary } from '../api'
 import type { T, TKey } from '../i18n'
 
 const STATUSES = ['pending', 'in-progress', 'done', 'blocked']
@@ -13,10 +13,124 @@ export function StatusChip({ status, t }: { status: string | null; t: T }) {
 
 // ------------------------------------------------------------ dashboard
 
+const pct = (p: Progress) => (p.total ? Math.round((p.done / p.total) * 100) : 0)
+
+function ProgressBar({ tasks, t }: { tasks: Progress; t: T }) {
+  return (
+    <>
+      <div className="progress">
+        <div style={{ width: `${pct(tasks)}%` }} />
+      </div>
+      <div className="meta">{tasks.total ? `${tasks.done}/${tasks.total} ${t('dash.tasks')} · ${pct(tasks)}%` : t('dash.noTasks')}</div>
+    </>
+  )
+}
+
+/** Which artifacts of a change or feature exist yet: present ones are highlighted. */
+function Artifacts({ items }: { items: [string, boolean][] }) {
+  return (
+    <div className="artifacts">
+      {items.map(([name, on]) => (
+        <span key={name} className={on ? 'on' : ''}>
+          {name}
+        </span>
+      ))}
+    </div>
+  )
+}
+
+function OpenSpecSection({ data, t, onOpen }: { data: NonNullable<SddSummary['openspec']>; t: T; onOpen: (p: string) => void }) {
+  return (
+    <>
+      <h2>OpenSpec · {t('dash.activeChanges')}</h2>
+      {data.changes.length ? (
+        <div className="phases">
+          {data.changes.map((c) => (
+            <div className="card" key={c.id} onClick={() => onOpen(c.path)}>
+              <div className="meta">
+                <span className="num">{c.id}</span>
+              </div>
+              <div className="title">{c.title}</div>
+              <Artifacts items={[['proposal', c.artifacts.proposal], ['design', c.artifacts.design], ['tasks', c.artifacts.tasks], [c.artifacts.specs ? `specs ×${c.artifacts.specs}` : 'specs', c.artifacts.specs > 0]]} />
+              <ProgressBar tasks={c.tasks} t={t} />
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="hint">{t('dash.noChanges')}</p>
+      )}
+      <h2>OpenSpec · {t('dash.specs')}</h2>
+      {data.specs.length ? (
+        <div className="chips">
+          {data.specs.map((s) => (
+            <button key={s.id} className="chip" onClick={() => onOpen(s.path)}>
+              {s.id}
+            </button>
+          ))}
+        </div>
+      ) : (
+        <p className="hint">{t('dash.noSpecs')}</p>
+      )}
+      {!!data.archived.length && (
+        <>
+          <h2>OpenSpec · {t('dash.archived')}</h2>
+          <div className="chips">
+            {data.archived.map((a) => (
+              <button key={a.id} className="chip" disabled={!a.path} onClick={() => onOpen(a.path)}>
+                {a.id}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </>
+  )
+}
+
+function SpecKitSection({ data, t, onOpen }: { data: NonNullable<SddSummary['speckit']>; t: T; onOpen: (p: string) => void }) {
+  return (
+    <>
+      <h2>Spec Kit · {t('dash.constitution')}</h2>
+      {data.constitution ? (
+        <div className="row">
+          <button className="chip" onClick={() => onOpen(data.constitution!.path)}>
+            {data.constitution.path}
+          </button>
+          <StatusChip status={data.constitution.filled ? 'done' : 'pending'} t={t} />
+          {!data.constitution.filled && <span className="hint">{t('dash.constitutionTodo')}</span>}
+        </div>
+      ) : (
+        <p className="hint">{t('dash.constitutionTodo')}</p>
+      )}
+      <h2>Spec Kit · {t('dash.features')}</h2>
+      {data.features.length ? (
+        <div className="phases">
+          {data.features.map((f) => (
+            <div className="card" key={f.id} onClick={() => onOpen(f.path)}>
+              <div className="meta">
+                <span className="num">{f.id}</span>
+              </div>
+              <div className="title">{f.title}</div>
+              <Artifacts items={[['spec', f.artifacts.spec], ['plan', f.artifacts.plan], ['tasks', f.artifacts.tasks]]} />
+              <ProgressBar tasks={f.tasks} t={t} />
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="hint">{t('dash.noFeatures')}</p>
+      )}
+    </>
+  )
+}
+
 export function Dashboard({ t, tick, onOpen }: { t: T; tick: number; onOpen: (p: string) => void }) {
   const [docs, setDocs] = useState<DocSummary[]>([])
+  const [sdd, setSdd] = useState<SddSummary>({})
   useEffect(() => {
-    api.dashboard().then((d) => setDocs(d.docs))
+    api.dashboard().then((d) => {
+      setDocs(d.docs)
+      setSdd(d.sdd)
+    })
   }, [tick])
 
   const phases = docs.filter((d) => d.type === 'phase').sort((a, b) => (a.phase ?? 999) - (b.phase ?? 999) || a.path.localeCompare(b.path))
@@ -25,7 +139,9 @@ export function Dashboard({ t, tick, onOpen }: { t: T; tick: number; onOpen: (p:
 
   return (
     <div className="page">
-      <h2>{t('dash.phases')}</h2>
+      {sdd.openspec && <OpenSpecSection data={sdd.openspec} t={t} onOpen={onOpen} />}
+      {sdd.speckit && <SpecKitSection data={sdd.speckit} t={t} onOpen={onOpen} />}
+      {(phases.length > 0 || (!sdd.openspec && !sdd.speckit)) && <h2>{t('dash.phases')}</h2>}
       {phases.length ? (
         <div className="phases">
           {phases.map((p) => {
@@ -48,7 +164,7 @@ export function Dashboard({ t, tick, onOpen }: { t: T; tick: number; onOpen: (p:
           })}
         </div>
       ) : (
-        <p style={{ color: 'var(--muted)' }}>{t('dash.noPhases')}</p>
+        !sdd.openspec && !sdd.speckit && <p style={{ color: 'var(--muted)' }}>{t('dash.noPhases')}</p>
       )}
 
       {types.map((type) => (

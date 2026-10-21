@@ -17,11 +17,15 @@ export function parseFrontmatter(text: string): Record<string, any> {
   const m = text.match(/^---\r?\n([\s\S]*?)\r?\n---/)
   if (!m) return {}
   try {
-    return YAML.parse(m[1]) ?? {}
+    // Silent: user frontmatter may hold anything, e.g. template placeholders like `{{date}}` (a nested map).
+    return YAML.parse(m[1], { logLevel: 'error' }) ?? {}
   } catch {
     return {}
   }
 }
+
+/** A frontmatter value shown as text; maps and lists (e.g. an unfilled `{{date}}`) count as missing. */
+const asText = (v: unknown): string | null => (v instanceof Date ? v.toISOString().slice(0, 10) : v == null || typeof v === 'object' ? null : String(v))
 
 export function summarize(root: string): DocSummary[] {
   return flattenFiles(scanTree(root)).map((f) => {
@@ -32,11 +36,11 @@ export function summarize(root: string): DocSummary[] {
     const heading = text.match(/^#\s+(.+)$/m)?.[1]
     return {
       path: f.path,
-      title: meta.title ?? heading ?? f.name.replace(/\.md$/i, ''),
-      type: meta.type ?? null,
-      status: meta.status ?? null,
+      title: asText(meta.title) ?? heading ?? f.name.replace(/\.md$/i, ''),
+      type: asText(meta.type),
+      status: asText(meta.status),
       phase: typeof meta.phase === 'number' ? meta.phase : null,
-      updated: meta.updated ? String(meta.updated instanceof Date ? meta.updated.toISOString().slice(0, 10) : meta.updated) : null,
+      updated: asText(meta.updated),
       tasks: { done, total },
     }
   })

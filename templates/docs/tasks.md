@@ -6,10 +6,20 @@ updated: {{date}}
 
 # Tasks
 
+Small work that doesn't belong to a phase. Optional `#tag` and `@priority` at the end of a task.
+
 ## Now
 
-- [ ] First task
+- [ ] First task #setup @high
+
+## Next
+
+- [ ] Something for after #docs
 
 ## Later
 
-- [ ] Next task
+- [ ] An idea worth keeping
+
+## Done
+
+- [x] Example of a finished task
