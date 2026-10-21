@@ -11,19 +11,23 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        node: [20, 22]
     steps:
       - uses: actions/checkout@v4
       # Uses the pnpm version pinned in package.json's `packageManager`.
       - uses: pnpm/action-setup@v4
+      # pnpm itself needs Node 22+ (node:sqlite), so install and build there...
       - uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node }}
+          node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm build
-      - name: CLI smoke test
+      - name: CLI smoke test (Node 22)
+        run: node dist/cli.js --help
+      # ...then check the built CLI on the oldest Node it supports (package.json `engines`).
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: CLI smoke test (Node 20)
         run: node dist/cli.js --help
