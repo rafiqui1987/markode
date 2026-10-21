@@ -44,6 +44,21 @@ export function setIgnored(root: string, rel: string, kind: 'dir' | 'file', igno
   fs.writeFileSync(path.join(root, IGNORE_FILE), lines.length ? lines.join('\n') + '\n' : '')
 }
 
+/**
+ * Paths the file watcher skips: the same folders the scan never enters (ALWAYS_SKIP and
+ * .gitignore), so it doesn't walk caches or dependencies. `isDir` is unknown before a path is
+ * stat'ed; then it is skipped if ignored as either a file or a folder.
+ */
+export function watchSkips(root: string): (rel: string, isDir?: boolean) => boolean {
+  const gitIgnore = loadIgnore(root, '.gitignore')
+  return (rel, isDir) => {
+    if (!rel || rel.startsWith('..')) return false
+    if (rel.split('/').some((s) => ALWAYS_SKIP.has(s))) return true
+    if (isDir !== false && gitIgnore.ignores(rel + '/')) return true
+    return isDir !== true && gitIgnore.ignores(rel)
+  }
+}
+
 /** Tree of every .md file under root; folders without .md files are pruned. */
 export function scanTree(root: string): TreeNode[] {
   const gitIgnore = loadIgnore(root, '.gitignore')

@@ -10,7 +10,7 @@ import { summarize } from '../core/dashboard.js'
 import { gitDiff, gitStatuses, isGitRepo } from '../core/git.js'
 import { allStatuses, fileStatus, foreignFiles, keepLanguage, translationPath } from '../core/i18n.js'
 import { appliedRuleIds, applyRulesToFile, deleteRule, listRules, projectSourceLang, saveRule } from '../core/rules.js'
-import { scanTree, setIgnored } from '../core/scan.js'
+import { scanTree, setIgnored, watchSkips } from '../core/scan.js'
 
 interface Options {
   root: string
@@ -233,20 +233,29 @@ export async function startServer({ root, port, open: openBrowser }: Options) {
     for (const client of wss.clients) client.send(data)
   }
 
+  const skips = watchSkips(root)
   watch(root, {
     ignoreInitial: true,
-    ignored: (p) => {
+    // Unreadable folders (e.g. caches owned by another user) are skipped instead of failing.
+    ignorePermissionErrors: true,
+    ignored: (p, stats) => {
       const rel = toPosix(path.relative(root, p))
-      return /(^|\/)(node_modules|\.git|dist|build|\.next|\.turbo|coverage)(\/|$)/.test(rel) || (rel.startsWith('.mdrules/') && !rel.startsWith('.mdrules/i18n') && rel !== '.mdrules/state.json' && rel !== '.mdrules/config.json')
+      // .mdrules is skipped by the scan, but translations and sync state live there.
+      if (rel === '.mdrules') return false
+      if (rel.startsWith('.mdrules/')) return !rel.startsWith('.mdrules/i18n') && rel !== '.mdrules/state.json' && rel !== '.mdrules/config.json'
+      return skips(rel, stats ? stats.isDirectory() : undefined)
     },
-  }).on('all', (event, file) => {
-    const abs = path.resolve(file)
-    if (!abs.endsWith('.md') && !abs.endsWith('.json') && !abs.endsWith('.mdrulesignore') && event !== 'addDir' && event !== 'unlinkDir') return
-    let rel = toPosix(path.relative(root, abs))
-    const i18n = toPosix(path.relative(root, path.join(stateDir(root), 'i18n')))
-    if (rel.startsWith(i18n + '/')) rel = rel.split('/').slice(3).join('/') // .mdrules/i18n/<lang>/<path>
-    broadcast({ type: 'fs', event, path: rel })
   })
+    // Without a listener a watch error crashes the server; live updates for that path are just lost.
+    .on('error', (err) => console.warn(pc.yellow(`  file watcher: ${(err as Error).message}`)))
+    .on('all', (event, file) => {
+      const abs = path.resolve(file)
+      if (!abs.endsWith('.md') && !abs.endsWith('.json') && !abs.endsWith('.mdrulesignore') && event !== 'addDir' && event !== 'unlinkDir') return
+      let rel = toPosix(path.relative(root, abs))
+      const i18n = toPosix(path.relative(root, path.join(stateDir(root), 'i18n')))
+      if (rel.startsWith(i18n + '/')) rel = rel.split('/').slice(3).join('/') // .mdrules/i18n/<lang>/<path>
+      broadcast({ type: 'fs', event, path: rel })
+    })
 
   const url = `http://localhost:${actualPort}`
   console.log(`\n  ${pc.bold('mdrules')} ${pc.dim('→')} ${pc.cyan(url)}  ${pc.dim(root)}\n`)
