@@ -130,7 +130,8 @@ export function writeManagedBlock(file: string, body: string | null, top = false
     return
   }
   const section = `${START}\n${body}\n${END}`
-  if (existing) return fs.writeFileSync(file, text.replace(existing, section))
+  // A function replacer: `$&` or `$'` in the body would otherwise be read as a replacement pattern.
+  if (existing) return fs.writeFileSync(file, text.replace(existing, () => section))
   const title = top ? /^# .*\n/m.exec(text) : null
   if (title) return fs.writeFileSync(file, text.slice(0, title.index + title[0].length) + '\n' + section + '\n' + text.slice(title.index + title[0].length))
   fs.writeFileSync(file, text.replace(/\s*$/, '') + '\n\n' + section + '\n')

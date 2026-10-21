@@ -274,7 +274,8 @@ export async function startServer({ root, port, open: openBrowser }: Options) {
       res.writeHead(404).end()
       return
     }
-    res.writeHead(200, { 'content-type': type, 'cache-control': 'no-cache' })
+    // Opened directly (not as <img>), an SVG with a script would run on this origin and reach the API.
+    res.writeHead(200, { 'content-type': type, 'cache-control': 'no-cache', 'content-security-policy': 'sandbox', 'x-content-type-options': 'nosniff' })
     fs.createReadStream(file).pipe(res)
   }
 

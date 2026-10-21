@@ -47,6 +47,8 @@ export function listRules(): Rule[] {
 export function saveRule(rule: { id?: string; title: string; body: string }): Rule {
   seedRules()
   const id = rule.id || slugify(rule.title) || `rule-${Date.now()}`
+  // The id names a file in the rules folder (and the `<!-- rule:id -->` marker only accepts these characters).
+  if (!/^[\w-]+$/.test(id)) throw new Error(`Invalid rule id: ${id}`)
   const text = `---\n${YAML.stringify({ title: rule.title }).trim()}\n---\n${rule.body.trim()}\n`
   fs.writeFileSync(path.join(rulesDir(), `${id}.md`), text)
   return { id, title: rule.title, body: rule.body.trim() }
@@ -112,7 +114,8 @@ function renderSection(rules: Rule[], sourceLang: Lang): string {
 export function applyRules(docText: string, rules: Rule[], sourceLang: Lang = sourceLangOf(docText)): string {
   const section = renderSection(rules, sourceLang)
   const existing = extractSection(docText)
-  if (existing) return docText.replace(existing, section)
+  // A function replacer: a rule body with `$&` or `$'` would otherwise be read as a replacement pattern.
+  if (existing) return docText.replace(existing, () => section)
   return docText.replace(/\s*$/, '') + '\n\n' + section + '\n'
 }
 

@@ -35,7 +35,8 @@ export interface Thread {
 export const commentAuthor = Facet.define<string | null, string | null>({ combine: (v) => v[0] ?? null })
 
 const START = /^(\s*)<!-- (comment|reply) by /
-const HEADER = /^\s*<!-- (comment|reply) by (.+?), (\d{4}-\d{2}-\d{2})(?:, on "((?:[^"\\]|\\.)*)")?:\s?([\s\S]*?)\s*-->\s*$/
+/** Matched against the entry without its closing `-->` (see findThreads). */
+const HEADER = /^\s*<!-- (comment|reply) by (.+?), (\d{4}-\d{2}-\d{2})(?:, on "((?:[^"\\]|\\.)*)")?:\s?([\s\S]*)$/
 
 const unescape = (s: string) => s.replace(/\\(["\\])/g, '$1')
 const escapeQuote = (s: string) => s.replace(/(["\\])/g, '\\$1')
@@ -57,7 +58,9 @@ export function findThreads(doc: Text): Thread[] {
     // An entry may span several lines, up to the one that closes the HTML comment.
     let last = line
     while (!last.text.includes('-->') && last.number < doc.lines) last = doc.line(last.number + 1)
-    const m = HEADER.exec(doc.sliceString(line.from, last.to))
+    // The closing `-->` is checked by hand: a lazy match up to it was quadratic on long runs of spaces.
+    const raw = doc.sliceString(line.from, last.to).trimEnd()
+    const m = raw.endsWith('-->') ? HEADER.exec(raw.slice(0, -3)) : null
     n = last.number
     if (!m) continue
     const entry: CommentEntry = { kind: m[1] as CommentEntry['kind'], author: m[2], date: m[3], quote: unescape(m[4] ?? ''), text: m[5].trim(), from: line.from, to: last.to }
