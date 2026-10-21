@@ -10,6 +10,11 @@ images and checklists, plus a dashboard of phases and tasks from frontmatter, gi
 rule presets. Files are saved exactly as written, never reformatted, so the AI always reads clean, plain
 Markdown. Docs can also be viewed and edited in your own language while the source stays in sync.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/screenshot-dark.png">
+  <img alt="mdrules editor: file tree, a phase doc with checklists, an editable table, a Mermaid diagram and KaTeX math" src="docs/assets/screenshot-light.png">
+</picture>
+
 ## Quick start
 
 Requires Node.js 20 or newer.
