@@ -11,7 +11,7 @@ so humans can edit comfortably while the AI keeps reading plain Markdown.
 
 ## 1. Install and run
 
-- Installed as a library: `pnpm add -D markode` (or global).
+- Installed as a library: `pnpm add -D @rafiqui987/markode` (or global).
 - Run from the root of any project: `pnpm markode` → starts a local server and opens the browser.
 - Works in **monorepos**: each folder with its own `CLAUDE.md` / `AGENTS.md` is a "project" with its own rules.
 

@@ -1,5 +1,5 @@
 {
-  "name": "markode",
+  "name": "@rafiqui987/markode",
   "version": "0.2.6",
   "description": "Visual editor for CLAUDE.md, AGENTS.md and /docs — humans edit comfortably, the AI keeps reading plain Markdown.",
   "keywords": [
@@ -24,6 +24,9 @@
     "url": "git+https://github.com/rafiqui1987/markode.git"
   },
   "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "author": "rafiqui1987",
   "type": "module",
   "bin": {

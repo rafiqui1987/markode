@@ -23,7 +23,7 @@ diffs stay clean and AI agents keep reading plain Markdown.
 Requires Node.js 20 or newer. From the root of any project (monorepos included):
 
 ```bash
-npx markode
+npx @rafiqui987/markode
 ```
 
 The very first time, markode asks how you want your projects set up:
@@ -281,7 +281,7 @@ markode serve --port 5000 --no-open
 markode translate           # choose languages to review the docs in (also: markode --translate)
 ```
 
-To keep it installed: `npm install -g markode` (or `pnpm add -g markode`).
+To keep it installed: `npm install -g @rafiqui987/markode` (or `pnpm add -g @rafiqui987/markode`).
 
 ## For AI agents
 
