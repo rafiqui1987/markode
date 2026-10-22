@@ -24,8 +24,15 @@ Requires Node.js 20 or newer. From the root of any project (monorepos included):
 npx mdrules
 ```
 
-The first run asks a few questions (main doc, how to plan the work, the language you work in, rules)
-and opens the editor at `http://localhost:4319`. It only listens on `127.0.0.1`.
+The very first time, mdrules asks how you want your projects set up:
+
+- **With your answers** (default): answer once (main doc, how to plan the work, the language you
+  work in, rules…). They are saved in `~/.mdrules/defaults.json` and every new project is set up
+  with them, without questions. For a project that needs something else: `mdrules init --custom`.
+- **Ask in each project**: run `mdrules -D` the first time. Each project asks its own questions.
+
+Change your choice any time with `mdrules setup`. Then the editor opens at `http://localhost:4319`;
+it only listens on `127.0.0.1`.
 
 ## What it does
 
@@ -199,7 +206,10 @@ skill.
 
 ```bash
 mdrules                     # set up the project if needed, then open the editor
-mdrules init                # run the setup again
+mdrules init                # run the setup again (with your defaults, if you saved them)
+mdrules init --custom       # set up this project with its own answers
+mdrules setup               # change your defaults, or switch to asking in each project
+mdrules -D                  # first run: don't save defaults, ask in each project
 mdrules serve               # open the editor without the setup
 mdrules serve --port 5000 --no-open
 mdrules translate           # choose languages to review the docs in (also: mdrules --translate)

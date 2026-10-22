@@ -1,14 +1,16 @@
 import { readConfig } from '../core/config.js'
+import { readDefaults, type SetupDefaults } from '../core/defaults.js'
 import { keepLanguage, markSynced, syncReport } from '../core/i18n.js'
 import { startServer } from '../server/index.js'
-import { runInit } from './init.js'
+import { runInit, runSetup } from './init.js'
 import { runTranslate } from './translate.js'
 
 const HELP = `mdrules — visual editor for your project's Markdown
 
 Usage
   mdrules                 init if needed, then open the editor
-  mdrules init            (re)run the setup: main doc, specs structure, rules, languages
+  mdrules init            (re)run the project setup: main doc, specs structure, rules, languages
+  mdrules setup           choose how projects are set up: with your saved answers, or asking each time
   mdrules serve           open the editor without running init
   mdrules translate       choose languages to review the docs in (or: mdrules --translate)
   mdrules sync --status [--json]                    translations + files not in the source language
@@ -16,6 +18,8 @@ Usage
   mdrules sync --keep <path...>                     keep files in their current language
 
 Options
+  -D           first run: skip saving defaults; every project asks its own questions
+  --custom     init: ask every question for this project, ignoring your defaults
   --port <n>   server port (default 4319)
   --no-open    do not open the browser
 `
@@ -34,12 +38,18 @@ async function main() {
 
   if (command === 'sync') return sync()
   if (command === 'translate' || flag('--translate')) return runTranslate(root)
+  if (command === 'setup') {
+    await runSetup(flag('-D'))
+    return
+  }
   if (command === 'init') {
-    await runInit(root)
+    await runInit(root, flag('--custom') ? null : await defaults())
     return
   }
   if (command === 'start' && !readConfig(root)) {
-    if (process.stdin.isTTY) await runInit(root)
+    if (process.stdin.isTTY) await runInit(root, flag('--custom') ? null : await defaults())
+    // Saved defaults need no answers, so they also apply without a terminal.
+    else if (readDefaults()?.mode === 'defaults') await runInit(root, readDefaults())
   }
   if (command === 'start' || command === 'serve') {
     await startServer({ root, port: Number(option('--port') ?? 4319), open: !flag('--no-open') })
@@ -47,6 +57,12 @@ async function main() {
   }
   console.log(HELP)
   process.exitCode = 1
+}
+
+/** The user's defaults when projects use them, null to ask; the first time, choose (or -D to always ask). */
+async function defaults(): Promise<SetupDefaults | null> {
+  const d = readDefaults() ?? (process.stdin.isTTY ? await runSetup(flag('-D')) : null)
+  return d?.mode === 'defaults' ? d : null
 }
 
 function sync() {

@@ -3,6 +3,7 @@ import path from 'node:path'
 import * as p from '@clack/prompts'
 import pc from 'picocolors'
 import { type Lang, LANG_NAMES, LANGS, MAIN_DOCS, type ProjectConfig, readConfig, writeConfig } from '../core/config.js'
+import { BASE_DEFAULTS, defaultsFile, readDefaults, type SetupDefaults, writeDefaults } from '../core/defaults.js'
 import { appliedRuleIds, applyRulesToFile, listRules, sourceLangOf } from '../core/rules.js'
 import { type Area, detectAreas, installMethodSkills, methodSection, scaffoldMethod, suggestPrefix } from '../core/method.js'
 import { activateProposals, type ProposalLayout } from '../core/proposals.js'
@@ -18,8 +19,14 @@ function check<T>(value: T): Exclude<T, symbol> {
   return value as Exclude<T, symbol>
 }
 
-async function chooseMainDoc(root: string): Promise<string> {
+async function chooseMainDoc(root: string, d: SetupDefaults | null): Promise<string> {
   const existing = MAIN_DOCS.filter((d) => fs.existsSync(path.join(root, d)))
+  if (d) {
+    if (existing.length) return existing.includes(d.mainDoc) ? d.mainDoc : existing[0]
+    createMainDoc(root, d.mainDoc)
+    p.log.success(`Created ${d.mainDoc}`)
+    return d.mainDoc
+  }
 
   if (existing.length === 2) {
     return check(
@@ -53,13 +60,35 @@ async function chooseMainDoc(root: string): Promise<string> {
   return choice
 }
 
+const WORKFLOW_OPTIONS: { value: Workflow; label: string; hint?: string }[] = [
+  { value: 'none', label: 'None' },
+  { value: 'mdrules', label: 'mdrules method', hint: 'vision, architecture, phases and one file per task; per area in monorepos' },
+  { value: 'openspec', label: 'OpenSpec', hint: 'specs + proposed changes, good for existing projects' },
+  { value: 'speckit', label: 'GitHub Spec Kit', hint: 'constitution → spec → plan → tasks, per feature' },
+]
+const PROPOSALS_QUESTION = 'The AI can write proposals you answer by ticking options and commenting. How should they be organized?'
+const PROPOSAL_OPTIONS: { value: ProposalLayout; label: string; hint: string }[] = [
+  { value: 'structured', label: 'By topic and area', hint: 'docs/proposals/auth/…, services/docs/proposals/…' },
+  { value: 'general', label: 'One folder', hint: 'docs/proposals/' },
+]
+const SOURCE_LANG_QUESTION = 'Language you work in (every .md file is written in it)'
+const SOURCE_LANG_MARK = /<!-- mdrules:source-lang:\w+ -->/
+const LANG_OPTIONS = LANGS.map((l) => ({ value: l, label: LANG_NAMES[l], hint: l === 'en' ? 'default' : undefined }))
+const HIDE_QUESTION = 'Hide the .mdrules/ folder in VS Code?'
+const ruleOptions = (rules: ReturnType<typeof listRules>) => rules.map((r) => ({ value: r.id, label: r.title, hint: r.body.split('\n')[0].replace(/^- /, '') }))
+const agentOptions = () => (Object.keys(SDD_AGENTS) as SddAgent[]).map((a) => ({ value: a, label: SDD_AGENTS[a].label }))
+
 const WORKFLOW_LABEL: Record<Workflow, string> = { none: 'None', mdrules: 'mdrules', openspec: 'OpenSpec', speckit: 'GitHub Spec Kit' }
 const WORKFLOW_GUIDE: Record<Workflow, string> = { none: '', mdrules: 'docs/README.md', openspec: 'openspec/README.md', speckit: 'specs/README.md' }
 
 /** In a monorepo, which top-level folders get their own docs and tasks, and their task prefixes. */
-async function chooseAreas(root: string): Promise<Area[]> {
+async function chooseAreas(root: string, d: SetupDefaults | null): Promise<Area[]> {
   const candidates = detectAreas(root)
   if (!candidates.length) return []
+  if (d) {
+    const used = new Set<string>()
+    return candidates.map((dir) => ({ dir, prefix: suggestPrefix(dir, used) }))
+  }
   const dirs = check(
     await p.multiselect({
       message: 'Monorepo detected. Which folders are areas with their own docs and tasks? (none: one docs/ for everything)',
@@ -86,43 +115,22 @@ async function chooseAreas(root: string): Promise<Area[]> {
 }
 
 /** Ask for the specs and planning structure and create it; an existing OpenSpec or Spec Kit setup is kept as is. */
-async function chooseWorkflow(root: string, mainDoc: string, previous: Workflow | undefined): Promise<{ workflow: Workflow; section?: string }> {
+async function chooseWorkflow(root: string, mainDoc: string, previous: Workflow | undefined, d: SetupDefaults | null): Promise<{ workflow: Workflow; section?: string }> {
   const detected = detectWorkflow(root)
   if (detected) {
     p.log.info(`${WORKFLOW_LABEL[detected]} found: mdrules shows it in the dashboard.`)
     return { workflow: detected }
   }
   for (;;) {
-    const choice = check(
-      await p.select<Workflow>({
-        message: 'Create a base structure for specs and planning?',
-        options: [
-          { value: 'none', label: 'None' },
-          { value: 'mdrules', label: 'mdrules method', hint: 'vision, architecture, phases and one file per task; per area in monorepos' },
-          { value: 'openspec', label: 'OpenSpec', hint: 'specs + proposed changes, good for existing projects' },
-          { value: 'speckit', label: 'GitHub Spec Kit', hint: 'constitution → spec → plan → tasks, per feature' },
-        ],
-        initialValue: previous ?? 'none',
-      }),
-    )
+    const choice = d ? d.workflow : check(await p.select<Workflow>({ message: 'Create a base structure for specs and planning?', options: WORKFLOW_OPTIONS, initialValue: previous ?? 'none' }))
     if (choice === 'none') return { workflow: choice }
     if (choice === 'mdrules') {
-      const areas = await chooseAreas(root)
+      const areas = await chooseAreas(root, d)
       const created = scaffoldMethod(root, mainDoc, areas)
       installMethodSkills(root)
       // Proposals come with the method; how to organize them only matters in a big project.
       const big = areas.length > 0 || flattenFiles(scanTree(root)).length > 40
-      const layout: ProposalLayout = big
-        ? check(
-            await p.select<ProposalLayout>({
-              message: 'The AI can write proposals you answer by ticking options and commenting. How should they be organized?',
-              options: [
-                { value: 'structured', label: 'By topic and area', hint: 'docs/proposals/auth/…, services/docs/proposals/…' },
-                { value: 'general', label: 'One folder', hint: 'docs/proposals/' },
-              ],
-            }),
-          )
-        : 'general'
+      const layout: ProposalLayout = !big ? 'general' : d ? d.proposals : check(await p.select<ProposalLayout>({ message: PROPOSALS_QUESTION, options: PROPOSAL_OPTIONS }))
       activateProposals(root, layout, mainDoc)
       if (created.length) p.log.success(`Created ${created.length} files: ${created.slice(0, 8).join(', ')}${created.length > 8 ? '…' : ''}`)
       p.log.info(`How it works: ${pc.cyan('docs/README.md')}. Skills: /mdrules-new-task, /mdrules-close-session.`)
@@ -130,7 +138,10 @@ async function chooseWorkflow(root: string, mainDoc: string, previous: Workflow 
     }
 
     let official = true
-    if (choice === 'speckit' && !hasUv()) {
+    if (choice === 'speckit' && !hasUv() && d) {
+      p.log.warn('Spec Kit needs uv (Python) to install its AI commands, and uv was not found: creating the structure only.')
+      official = false
+    } else if (choice === 'speckit' && !hasUv()) {
       const next = check(
         await p.select({
           message: 'Spec Kit needs uv (Python) to install its AI commands, and uv was not found.',
@@ -145,13 +156,16 @@ async function chooseWorkflow(root: string, mainDoc: string, previous: Workflow 
     }
 
     const initial: SddAgent = mainDoc === 'AGENTS.md' ? 'codex' : 'claude'
-    const agentOptions = (Object.keys(SDD_AGENTS) as SddAgent[]).map((a) => ({ value: a, label: SDD_AGENTS[a].label }))
     // Spec Kit sets up one agent at init; OpenSpec any number.
     const agents: SddAgent[] = !official
       ? [initial]
-      : choice === 'openspec'
-        ? check(await p.multiselect({ message: 'Install the OpenSpec commands for which agents?', options: agentOptions, initialValues: [initial], required: false }))
-        : [check(await p.select({ message: 'Install the Spec Kit commands for which agent?', options: agentOptions, initialValue: initial }))]
+      : d
+        ? choice === 'speckit'
+          ? [d.agents[0] ?? initial]
+          : d.agents
+        : choice === 'openspec'
+        ? check(await p.multiselect({ message: 'Install the OpenSpec commands for which agents?', options: agentOptions(), initialValues: [initial], required: false }))
+        : [check(await p.select({ message: 'Install the Spec Kit commands for which agent?', options: agentOptions(), initialValue: initial }))]
 
     const spin = p.spinner()
     spin.start(official ? `Installing ${WORKFLOW_LABEL[choice]}…` : 'Creating the structure…')
@@ -164,43 +178,44 @@ async function chooseWorkflow(root: string, mainDoc: string, previous: Workflow 
   }
 }
 
-export async function runInit(root: string): Promise<ProjectConfig> {
+/** Set up the project: with the user's saved defaults `d`, or asking every question when null. */
+export async function runInit(root: string, d: SetupDefaults | null = null): Promise<ProjectConfig> {
   p.intro(pc.bgCyan(pc.black(' mdrules ')))
+  if (d) p.log.info(`Using your defaults (${pc.cyan(defaultsFile())}). To choose differently for this project: ${pc.cyan('mdrules init --custom')}`)
   const previous = readConfig(root)
 
-  const mainDoc = await chooseMainDoc(root)
+  const mainDoc = await chooseMainDoc(root, d)
   const mainFile = path.join(root, mainDoc)
 
-  const { workflow, section } = await chooseWorkflow(root, mainDoc, previous?.workflow)
+  const { workflow, section } = await chooseWorkflow(root, mainDoc, previous?.workflow, d)
   applyWorkflowToFile(mainFile, workflow, section)
 
   const mainText = fs.readFileSync(mainFile, 'utf8')
-  const sourceLang = check(
-    await p.select<Lang>({
-      message: 'Language you work in (every .md file is written in it)',
-      options: LANGS.map((l) => ({ value: l, label: LANG_NAMES[l], hint: l === 'en' ? 'default' : undefined })),
-      initialValue: sourceLangOf(mainText),
-    }),
-  )
+  // A language the project already declares is the team's: defaults don't override it.
+  const sourceLang = d
+    ? SOURCE_LANG_MARK.test(mainText)
+      ? sourceLangOf(mainText)
+      : d.sourceLang
+    : check(await p.select<Lang>({ message: SOURCE_LANG_QUESTION, options: LANG_OPTIONS, initialValue: sourceLangOf(mainText) }))
 
   // Translations to review the docs in are added on purpose, with `mdrules translate`.
   const langs = (previous?.langs ?? []).filter((l) => l !== sourceLang)
 
   const rules = listRules()
   const applied = appliedRuleIds(mainText)
-  const selected = check(
-    await p.multiselect({
-      message: 'Which working rules apply to this project?',
-      options: rules.map((r) => ({ value: r.id, label: r.title, hint: r.body.split('\n')[0].replace(/^- /, '') })),
-      initialValues: applied,
-      required: false,
-    }),
-  )
+  // Defaults add rules; they never remove the ones the project already has.
+  const selected = d
+    ? [...new Set([...applied, ...d.rules.filter((id) => rules.some((r) => r.id === id))])]
+    : check(await p.multiselect({ message: 'Which working rules apply to this project?', options: ruleOptions(rules), initialValues: applied, required: false }))
   applyRulesToFile(mainFile, selected, sourceLang)
 
   const subprojects = findSubprojects(scanTree(root))
   if (subprojects.length && selected.length) {
-    const targets = check(
+    const targets = d
+      ? d.rulesInSubprojects
+        ? subprojects
+        : []
+      : check(
       await p.multiselect({
         message: 'Monorepo detected. Apply the same rules to these projects too?',
         options: subprojects.map((s) => ({ value: s, label: s })),
@@ -215,7 +230,7 @@ export async function runInit(root: string): Promise<ProjectConfig> {
 
   ensureGitignore(root)
   if (!previous) {
-    const hide = check(await p.confirm({ message: 'Hide the .mdrules/ folder in VS Code?', initialValue: true }))
+    const hide = d ? d.hideInVsCode : check(await p.confirm({ message: HIDE_QUESTION, initialValue: true }))
     if (hide && !hideInVsCode(root)) p.log.warn('.vscode/settings.json has comments; add "**/.mdrules": true to files.exclude by hand.')
   }
   installSkill(root)
@@ -224,4 +239,59 @@ export async function runInit(root: string): Promise<ProjectConfig> {
   writeConfig(root, config)
   p.outro(`Ready. Skill installed in ${pc.cyan('.claude/skills/mdrules')}. To review the docs in another language: ${pc.cyan('mdrules translate')}`)
   return config
+}
+
+/**
+ * Choose how new projects are set up, once per user: with answers given now (applied to every
+ * project without asking) or asking in each project. `quick` picks the latter without questions.
+ */
+export async function runSetup(quick = false): Promise<SetupDefaults> {
+  const previous = readDefaults() ?? BASE_DEFAULTS
+  if (quick) {
+    const d = { ...previous, mode: 'ask' as const }
+    writeDefaults(d)
+    return d
+  }
+  p.intro(pc.bgCyan(pc.black(' mdrules setup ')))
+  const mode = check(
+    await p.select<SetupDefaults['mode']>({
+      message: 'How should mdrules set up your projects?',
+      options: [
+        { value: 'defaults', label: 'With my answers', hint: 'asked now, once; every project uses them' },
+        { value: 'ask', label: 'Ask in each project' },
+      ],
+      initialValue: previous.mode === 'ask' && !readDefaults() ? 'defaults' : previous.mode,
+    }),
+  )
+  if (mode === 'ask') {
+    const d = { ...previous, mode }
+    writeDefaults(d)
+    p.outro(`Saved. Each project will ask its own questions. Change it with ${pc.cyan('mdrules setup')}`)
+    return d
+  }
+
+  const mainDoc = check(
+    await p.select({
+      message: 'Main document to create when a project has none',
+      options: MAIN_DOCS.map((d) => ({ value: d, label: d, hint: d === 'CLAUDE.md' ? 'Claude Code' : 'other agents' })),
+      initialValue: previous.mainDoc,
+    }),
+  )
+  const workflow = check(await p.select<Workflow>({ message: 'Base structure for specs and planning', options: WORKFLOW_OPTIONS, initialValue: previous.workflow }))
+  let agents = previous.agents
+  let proposals = previous.proposals
+  if (workflow === 'openspec')
+    agents = check(await p.multiselect({ message: 'Install the OpenSpec commands for which agents?', options: agentOptions(), initialValues: previous.agents, required: false }))
+  if (workflow === 'speckit') agents = [check(await p.select({ message: 'Install the Spec Kit commands for which agent?', options: agentOptions(), initialValue: previous.agents[0] }))]
+  if (workflow === 'mdrules') proposals = check(await p.select<ProposalLayout>({ message: `${PROPOSALS_QUESTION} (big projects and monorepos)`, options: PROPOSAL_OPTIONS, initialValue: previous.proposals }))
+  const sourceLang = check(await p.select<Lang>({ message: `${SOURCE_LANG_QUESTION}; projects that already declare one keep it`, options: LANG_OPTIONS, initialValue: previous.sourceLang }))
+  const rules = listRules()
+  const selected = check(await p.multiselect({ message: 'Working rules to apply', options: ruleOptions(rules), initialValues: previous.rules.filter((id) => rules.some((r) => r.id === id)), required: false }))
+  const rulesInSubprojects = selected.length ? check(await p.confirm({ message: 'In monorepos, apply the rules to the subprojects too?', initialValue: previous.rulesInSubprojects })) : false
+  const hideInVsCode = check(await p.confirm({ message: HIDE_QUESTION, initialValue: previous.hideInVsCode }))
+
+  const d: SetupDefaults = { mode, mainDoc, workflow, agents, proposals, sourceLang, rules: selected, rulesInSubprojects, hideInVsCode }
+  writeDefaults(d)
+  p.outro(`Saved in ${pc.cyan(defaultsFile())}. Change them with ${pc.cyan('mdrules setup')}; for a single project: ${pc.cyan('mdrules init --custom')}`)
+  return d
 }
