@@ -70,9 +70,9 @@ export function App() {
   const [info, setInfo] = useState<Info | null>(null)
   const [data, setData] = useState<TreeData>({ tree: [], git: {}, sync: {}, foreign: {} })
   const [selected, setSelected] = useState<string | null>(() => decodeURIComponent(location.hash.slice(2)) || null)
-  const [view, setView] = useState<View>(() => (store.get('mdrules.view') as View) || 'editor')
+  const [view, setView] = useState<View>(() => (store.get('markode.view') as View) || 'editor')
   const [theme, setTheme] = useState<Theme>(() => {
-    const stored = store.get('mdrules.theme')
+    const stored = store.get('markode.theme')
     return stored === 'light' || stored === 'dark' ? stored : null
   })
   const [showIgnored, setShowIgnored] = useState(false)
@@ -81,19 +81,19 @@ export function App() {
   const [tick, setTick] = useState(0)
   const [fileTick, setFileTick] = useState(0)
   // The UI language is cached locally too, so the menus don't flash in English while settings load.
-  const [settings, setSettings] = useState<EditorSettings>(() => ({ ...DEFAULT_SETTINGS, uiLang: store.get('mdrules.uiLang') || DEFAULT_SETTINGS.uiLang }))
+  const [settings, setSettings] = useState<EditorSettings>(() => ({ ...DEFAULT_SETTINGS, uiLang: store.get('markode.uiLang') || DEFAULT_SETTINGS.uiLang }))
   const [settingsOpen, setSettingsOpen] = useState<SettingsSection | null>(null)
   /** Set once the user sends their answer to a proposal, until another file opens. */
   const [answered, setAnswered] = useState<string | null>(null)
-  /** The agent was waiting on that proposal (`mdrules wait`), so nothing had to be copied. */
+  /** The agent was waiting on that proposal (`markode wait`), so nothing had to be copied. */
   const [listening, setListening] = useState(false)
   const [pendingTranslations, setPendingTranslations] = useState(0)
   const [copiedTranslate, setCopiedTranslate] = useState(false)
   const [editHistory, setEditHistory] = useState<EditHistory>(NO_HISTORY)
   const editorCommands = useRef<EditorCommands | null>(null)
-  const [sidebarWidth, setSidebarWidth] = useState(() => Number(store.get('mdrules.sidebarWidth')) || SIDEBAR_DEFAULT)
-  const [sidebarHidden, setSidebarHidden] = useState(() => store.get('mdrules.sidebarHidden') === '1')
-  const [storedLang, setStoredLang] = useState<string | null>(() => store.get('mdrules.viewLang'))
+  const [sidebarWidth, setSidebarWidth] = useState(() => Number(store.get('markode.sidebarWidth')) || SIDEBAR_DEFAULT)
+  const [sidebarHidden, setSidebarHidden] = useState(() => store.get('markode.sidebarHidden') === '1')
+  const [storedLang, setStoredLang] = useState<string | null>(() => store.get('markode.viewLang'))
   const resolvedTheme = useResolvedTheme(theme)
 
   // The language the docs are viewed in: the source one, or an enabled translation.
@@ -123,7 +123,7 @@ export function App() {
     else setPendingTranslations(0)
   }, [info, tick])
   useEffect(() => applySettings(settings), [settings])
-  useEffect(() => store.set('mdrules.uiLang', settings.uiLang), [settings.uiLang])
+  useEffect(() => store.set('markode.uiLang', settings.uiLang), [settings.uiLang])
   useEffect(() => {
     document.documentElement.lang = viewLang
   }, [viewLang])
@@ -144,8 +144,8 @@ export function App() {
     }
     const unsubscribe = subscribe((e) => {
       // Sync state (state.json) changes the open file's status without touching its content.
-      if (e.path === selectedRef.current || e.path.startsWith('.mdrules/')) setFileTick((n) => n + 1)
-      if (e.path === '.mdrules/config.json') api.info().then(setInfo)
+      if (e.path === selectedRef.current || e.path.startsWith('.markode/')) setFileTick((n) => n + 1)
+      if (e.path === '.markode/config.json') api.info().then(setInfo)
       window.clearTimeout(timer)
       timer = window.setTimeout(refreshAll, 250)
     })
@@ -164,10 +164,10 @@ export function App() {
   useEffect(() => {
     if (selected) history.replaceState(null, '', `#/${encodeURI(selected)}`)
   }, [selected])
-  useEffect(() => store.set('mdrules.view', view), [view])
-  useEffect(() => store.set('mdrules.theme', theme ?? ''), [theme])
-  useEffect(() => store.set('mdrules.sidebarWidth', String(sidebarWidth)), [sidebarWidth])
-  useEffect(() => store.set('mdrules.sidebarHidden', sidebarHidden ? '1' : '0'), [sidebarHidden])
+  useEffect(() => store.set('markode.view', view), [view])
+  useEffect(() => store.set('markode.theme', theme ?? ''), [theme])
+  useEffect(() => store.set('markode.sidebarWidth', String(sidebarWidth)), [sidebarWidth])
+  useEffect(() => store.set('markode.sidebarHidden', sidebarHidden ? '1' : '0'), [sidebarHidden])
 
   // Drag the sidebar's edge to resize it; dragging it almost shut hides it.
   const startResize = (e: ReactPointerEvent<HTMLDivElement>) => {
@@ -200,7 +200,7 @@ export function App() {
 
   const setLang = (lang: string) => {
     setStoredLang(lang)
-    store.set('mdrules.viewLang', lang)
+    store.set('markode.viewLang', lang)
   }
 
   const changeProposals = async (active: boolean, layout: ProposalLayout) => {
@@ -208,7 +208,7 @@ export function App() {
     setInfo(await api.info())
   }
 
-  // Answering a proposal: mark it answered. An agent waiting on it (`mdrules wait`) wakes up by itself;
+  // Answering a proposal: mark it answered. An agent waiting on it (`markode wait`) wakes up by itself;
   // otherwise a message for the AI chat is copied.
   const sendAnswer = async () => {
     if (!selected) return
@@ -225,7 +225,7 @@ export function App() {
   }
 
   const copyTranslate = () =>
-    navigator.clipboard?.writeText('/mdrules translate').then(() => {
+    navigator.clipboard?.writeText('/markode translate').then(() => {
       setCopiedTranslate(true)
       setTimeout(() => setCopiedTranslate(false), 1500)
     })
@@ -281,7 +281,7 @@ export function App() {
           {sidebarHidden ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
         </button>
         <div className="brand">
-          mdrules <small>{info?.name}</small>
+          markode <small>{info?.name}</small>
         </div>
         <nav className="tabs">
           {tabs.map((tab) => (

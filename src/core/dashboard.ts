@@ -10,7 +10,7 @@ export interface DocSummary {
   status: string | null
   phase: number | null
   updated: string | null
-  /** Task id and area, for `type: task` docs (the mdrules method). */
+  /** Task id and area, for `type: task` docs (the markode method). */
   id: string | null
   area: string | null
   tasks: { done: number; total: number }

@@ -165,7 +165,7 @@ export function Editor({ path, lang, t, layoutKey, wrap, theme, externalTick, on
       const v = view.current
       if (!v || pending.current !== null || seq !== editSeq.current) return
       const current = v.state.doc.toString()
-      // Our own write echoed back: only the sync status may have changed (e.g. after `mdrules sync --mark`).
+      // Our own write echoed back: only the sync status may have changed (e.g. after `markode sync --mark`).
       if (data.content !== current && ownWrites.current.includes(data.content)) return callbacks.current.onSaved(data.status)
       file.current = data
       callbacks.current.onLoaded(data)

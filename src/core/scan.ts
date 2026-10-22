@@ -9,13 +9,13 @@ export interface TreeNode {
   kind: 'dir' | 'file'
   /** Folder that holds its own CLAUDE.md / AGENTS.md (monorepo package). */
   project?: boolean
-  /** Listed in .mdrulesignore. */
+  /** Listed in .markodeignore. */
   ignored?: boolean
   children?: TreeNode[]
 }
 
-const ALWAYS_SKIP = new Set(['node_modules', '.git', '.mdrules', 'dist', 'build', '.next', '.turbo', 'coverage', '.venv'])
-export const IGNORE_FILE = '.mdrulesignore'
+const ALWAYS_SKIP = new Set(['node_modules', '.git', '.markode', 'dist', 'build', '.next', '.turbo', 'coverage', '.venv'])
+export const IGNORE_FILE = '.markodeignore'
 
 function loadIgnore(root: string, file: string): Ignore {
   const ig = ignore()

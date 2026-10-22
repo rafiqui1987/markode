@@ -1,4 +1,4 @@
-# mdrules
+# markode
 
 Visual editor for a project's Markdown (CLAUDE.md, AGENTS.md, docs/). Spec: `docs/SPEC.md`.
 
@@ -27,12 +27,12 @@ templates/   # rule presets, docs scaffold, AI skill
 - Colors are CSS tokens in `web/src/styles.css`; editor token colors reference them.
 - Never reformat a user's file on save; only the edited table is re-serialized.
 
-<!-- mdrules:rules:start -->
+<!-- markode:rules:start -->
 ## Working rules
 
-This project uses mdrules: follow `.claude/skills/mdrules/SKILL.md` when editing any `.md` file.
+This project uses markode: follow `.claude/skills/markode/SKILL.md` when editing any `.md` file.
 
-<!-- mdrules:source-lang:en -->
+<!-- markode:source-lang:en -->
 - Source language of every `.md` file: **English** (`en`).
 
 <!-- rule:ask-before-commit -->
@@ -44,4 +44,4 @@ This project uses mdrules: follow `.claude/skills/mdrules/SKILL.md` when editing
 <!-- rule:lang-es-code-en -->
 - Write prompts answers and explanations in Spanish.
 - Write code, comments, commit messages and every `.md` file in English.
-<!-- mdrules:rules:end -->
+<!-- markode:rules:end -->

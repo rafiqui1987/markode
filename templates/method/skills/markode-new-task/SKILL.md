@@ -1,9 +1,9 @@
 ---
-name: mdrules-new-task
-description: Creates a task file in this project's docs (the mdrules method) when the user asks for a new task. Uses the task template and the next ID of the project, and adds the task to its phase.
+name: markode-new-task
+description: Creates a task file in this project's docs (the markode method) when the user asks for a new task. Uses the task template and the next ID of the project, and adds the task to its phase.
 ---
 
-# New task (mdrules method)
+# New task (markode method)
 
 Create tasks only when the user asks; you may propose them first.
 
@@ -17,6 +17,6 @@ Create tasks only when the user asks; you may propose them first.
    the goal and the acceptance criteria as a checklist. The frontmatter is the only place the status
    lives: there is no task index to update.
 5. If it belongs to a phase, add `- [ ] [<ID>](<relative path>) <title>` under "Tasks" in
-   `docs/phases/NN-*.md` (create the phase from the `mdrules-method` template if the user is planning
+   `docs/phases/NN-*.md` (create the phase from the `markode-method` template if the user is planning
    a new one).
 6. Show the task to the user. Do not start working on it until they say so.

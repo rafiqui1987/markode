@@ -151,7 +151,7 @@ export class MermaidWidget extends WidgetType {
       if (stale) out.innerHTML = stale
       else out.textContent = '…'
       loadMermaid(this.theme)
-        .then((m) => m.render(`mdrules-mermaid-${++mermaidSeq}`, this.code))
+        .then((m) => m.render(`markode-mermaid-${++mermaidSeq}`, this.code))
         .then(({ svg }) => {
           svgCache.set(key, svg)
           lastSvg.set(this.code, svg)
@@ -441,7 +441,7 @@ function insertColumn(m: TableModel, at: number) {
 }
 
 // Column widths are view-only (Markdown can't store them): fractions of the table width, kept per browser and keyed by the header row.
-const WIDTHS_KEY = 'mdrules.tableWidths'
+const WIDTHS_KEY = 'markode.tableWidths'
 const widthsKey = (header: string[]) => header.join('|')
 
 function loadWidths(header: string[]): number[] | null {

@@ -80,7 +80,7 @@ function Proposals({ docs, t, onOpen }: { docs: DocSummary[]; t: T; onOpen: (p: 
 function ProposalsTip({ t, onActivate }: { t: T; onActivate: () => void }) {
   const [hidden, setHidden] = useState(() => {
     try {
-      return localStorage.getItem('mdrules.proposalsTip') === 'hidden'
+      return localStorage.getItem('markode.proposalsTip') === 'hidden'
     } catch {
       return false
     }
@@ -102,7 +102,7 @@ function ProposalsTip({ t, onActivate }: { t: T; onActivate: () => void }) {
         onClick={() => {
           setHidden(true)
           try {
-            localStorage.setItem('mdrules.proposalsTip', 'hidden')
+            localStorage.setItem('markode.proposalsTip', 'hidden')
           } catch {}
         }}
       >
@@ -247,7 +247,7 @@ function TaskRow({ task, t, onOpen }: { task: DocSummary; t: T; onOpen: (p: stri
   )
 }
 
-/** Tasks of the mdrules method by status: what is moving, what is stuck, what is next. */
+/** Tasks of the markode method by status: what is moving, what is stuck, what is next. */
 function TaskBoard({ tasks, t, onOpen }: { tasks: DocSummary[]; t: T; onOpen: (p: string) => void }) {
   const done = tasks.filter((d) => d.status === 'done').length
   return (

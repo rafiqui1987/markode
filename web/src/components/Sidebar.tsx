@@ -20,7 +20,7 @@ interface Props {
   onDelete: (node: TreeNode) => void
 }
 
-const EXPANDED_KEY = 'mdrules.expanded'
+const EXPANDED_KEY = 'markode.expanded'
 
 function loadExpanded(): Set<string> | null {
   try {

@@ -1,9 +1,9 @@
 ---
-name: mdrules-status
-description: Summarizes where the work stands in a project that follows the mdrules method - what was touched last, what is in progress, blocked and pending - grouped by project in a monorepo. Use when the user asks what is pending, where things stand, what is left, or what was done last time.
+name: markode-status
+description: Summarizes where the work stands in a project that follows the markode method - what was touched last, what is in progress, blocked and pending - grouped by project in a monorepo. Use when the user asks what is pending, where things stand, what is left, or what was done last time.
 ---
 
-# Status (mdrules method)
+# Status (markode method)
 
 Answer from the task files, not by exploring the code.
 

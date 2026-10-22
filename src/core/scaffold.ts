@@ -31,9 +31,9 @@ export function createMainDoc(root: string, name: string) {
   fs.writeFileSync(file, fill(text, { name: path.basename(root), date: today() }))
 }
 
-/** Install (or refresh) the AI skill in .claude/skills/mdrules. */
+/** Install (or refresh) the AI skill in .claude/skills/markode. */
 export function installSkill(root: string) {
-  const dir = path.join(root, '.claude', 'skills', 'mdrules')
+  const dir = path.join(root, '.claude', 'skills', 'markode')
   fs.mkdirSync(dir, { recursive: true })
   fs.copyFileSync(path.join(TEMPLATES_DIR, 'skill', 'SKILL.md'), path.join(dir, 'SKILL.md'))
 }
@@ -41,11 +41,11 @@ export function installSkill(root: string) {
 export function ensureGitignore(root: string) {
   const file = path.join(root, '.gitignore')
   const text = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : ''
-  if (text.split('\n').some((l) => ['.mdrules', '.mdrules/', '/.mdrules', '/.mdrules/'].includes(l.trim()))) return
-  fs.writeFileSync(file, text + (text && !text.endsWith('\n') ? '\n' : '') + '.mdrules/\n')
+  if (text.split('\n').some((l) => ['.markode', '.markode/', '/.markode', '/.markode/'].includes(l.trim()))) return
+  fs.writeFileSync(file, text + (text && !text.endsWith('\n') ? '\n' : '') + '.markode/\n')
 }
 
-/** Hide .mdrules/ in VS Code so the project only shows the English files. */
+/** Hide .markode/ in VS Code so the project only shows the English files. */
 export function hideInVsCode(root: string) {
   const file = path.join(root, '.vscode', 'settings.json')
   let settings: Record<string, any> = {}
@@ -56,7 +56,7 @@ export function hideInVsCode(root: string) {
       return false // JSONC with comments: leave it alone rather than destroy it
     }
   }
-  settings['files.exclude'] = { ...(settings['files.exclude'] ?? {}), '**/.mdrules': true }
+  settings['files.exclude'] = { ...(settings['files.exclude'] ?? {}), '**/.markode': true }
   fs.mkdirSync(path.dirname(file), { recursive: true })
   fs.writeFileSync(file, JSON.stringify(settings, null, 2) + '\n')
   return true

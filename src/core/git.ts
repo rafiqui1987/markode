@@ -28,7 +28,7 @@ export function gitStatuses(root: string): Record<string, GitStatus> {
     if (code[0] === 'R' || code[0] === 'C') i++ // the original path follows; skip it
     if (!file.toLowerCase().endsWith('.md')) continue
     if (prefix && file.startsWith(prefix)) file = file.slice(prefix.length)
-    if (file.startsWith('.mdrules/')) continue // translations and state are never project changes
+    if (file.startsWith('.markode/')) continue // translations and state are never project changes
     result[file] = code === '??' ? 'U' : code.includes('D') ? 'D' : code.includes('A') ? 'A' : 'M'
   }
   return result

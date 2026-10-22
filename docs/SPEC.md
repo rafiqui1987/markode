@@ -4,15 +4,15 @@ status: in-progress
 updated: 2026-10-21
 ---
 
-# mdrules — Functional Specification
+# markode — Functional Specification
 
 Local visual editor for a project's `.md` files (CLAUDE.md, AGENTS.md, /docs and any .md),
 so humans can edit comfortably while the AI keeps reading plain Markdown.
 
 ## 1. Install and run
 
-- Installed as a library: `pnpm add -D mdrules` (or global).
-- Run from the root of any project: `pnpm mdrules` → starts a local server and opens the browser.
+- Installed as a library: `pnpm add -D markode` (or global).
+- Run from the root of any project: `pnpm markode` → starts a local server and opens the browser.
 - Works in **monorepos**: each folder with its own `CLAUDE.md` / `AGENTS.md` is a "project" with its own rules.
 
 ## 2. First run (init)
@@ -28,27 +28,27 @@ so humans can edit comfortably while the AI keeps reading plain Markdown.
 | Existing docs | Ask which are official; the main doc points the agent to them |
 | Always | Ask which **rule presets** to apply, none by default (see §3) |
 
-With the mdrules method, the setup creates only the task folder; vision, architecture and phases are
-created by the agent from the `mdrules-method` skill templates when there is something to write. A
+With the markode method, the setup creates only the task folder; vision, architecture and phases are
+created by the agent from the `markode-method` skill templates when there is something to write. A
 task's status lives only in its frontmatter (no task index).
 
-Init also installs the skill in `.claude/skills/mdrules/` so the AI writes using the conventions.
+Init also installs the skill in `.claude/skills/markode/` so the AI writes using the conventions.
 
 ## 3. Rule presets
 
 Reusable rules describing *how I work*, selectable on every init.
 
-- Stored globally at `~/.mdrules/rules/*.md` (one file per rule), reusable across projects.
-- mdrules ships some defaults; the user can create, edit and delete their own from the app.
+- Stored globally at `~/.markode/rules/*.md` (one file per rule), reusable across projects.
+- markode ships some defaults; the user can create, edit and delete their own from the app.
 - On init: multi-select checklist of available rules.
 - Selected rules are written into the main doc inside a managed section, so they can be updated later without touching the rest of the file:
 
 ```md
-<!-- mdrules:rules:start -->
+<!-- markode:rules:start -->
 ## Working rules
 - Never commit, push or open pull requests without asking first.
 - Change only what the task needs: don't refactor, rename or reformat unrelated code.
-<!-- mdrules:rules:end -->
+<!-- markode:rules:end -->
 ```
 
 The setup offers no rules by default (start from scratch). The library starts with common rules for AI
@@ -69,20 +69,20 @@ agents; each user edits it and adds their own in the Rules tab:
 ## 4. Language
 
 - Every project has a **source language** (default English): every `.md` file is written in it.
-  It is declared in the main doc's managed section (`<!-- mdrules:source-lang:xx -->`), so the team and the AI share it.
+  It is declared in the main doc's managed section (`<!-- markode:source-lang:xx -->`), so the team and the AI share it.
 - Each user enables any number of **translation languages**: English, Spanish, French, Portuguese, German, Italian.
 - The language selector switches between the original and each translation: sidebar and documents follow it. Translations can be **edited**.
 - The **interface language** is a separate, personal setting (Settings → General), English by default.
 - The source file is never overwritten by the app directly from a translation.
 - Translation is done by the **AI through the skill** (no API key in the app).
-- Files whose prose is not in the source language are flagged (badge + banner). `/mdrules translate` asks whether to convert them; "no" is remembered (`mdrules translate --keep`).
+- Files whose prose is not in the source language are flagged (badge + banner). `/markode translate` asks whether to convert them; "no" is remembered (`markode translate --keep`).
 
 ### Storage
 
-- Translations live in a hidden folder `.mdrules/i18n/<lang>/`, mirroring the original paths:
+- Translations live in a hidden folder `.markode/i18n/<lang>/`, mirroring the original paths:
 
 ```tree
-.mdrules/                  # hidden, git-ignored
+.markode/                  # hidden, git-ignored
   state.json               # hashes + sync status per file
   i18n/
     es/
@@ -91,29 +91,29 @@ agents; each user edits it and adds their own in the Rules tab:
         SPEC.md
 ```
 
-- Init adds `.mdrules/` to `.gitignore` → translations never reach the repo.
-- Init also offers to hide `.mdrules/` in the code editor (e.g. VS Code `files.exclude`), so the project only shows the English files.
-- The mdrules sidebar always shows the English tree; with a second language enabled, opening a file transparently loads its translation.
+- Init adds `.markode/` to `.gitignore` → translations never reach the repo.
+- Init also offers to hide `.markode/` in the code editor (e.g. VS Code `files.exclude`), so the project only shows the English files.
+- The markode sidebar always shows the English tree; with a second language enabled, opening a file transparently loads its translation.
 
 ### Sync flow
 
 `state.json` keeps, per file, the hash of the English source and of the translation.
 
-| Detected change | Status | What the AI does on `/mdrules translate` |
+| Detected change | Status | What the AI does on `/markode translate` |
 |---|---|---|
 | English changed | `outdated` | Re-translates into the second language |
 | Translation edited by the user | `pending-sync` | Asks; if approved, updates the English file, then refreshes the translations |
 | Both changed | `conflict` | Asks with a proposed merge (English wins on contradictions) |
 | No translation yet | `missing` | Translates the file |
 
-- Translating only happens when the user asks for `/mdrules translate`; mdrules shows a "to translate"
+- Translating only happens when the user asks for `/markode translate`; markode shows a "to translate"
   counter in the top bar and in Settings, with a button that copies the command.
-- `/mdrules sync` is a different job: it keeps the docs consistent (answered proposals, phases vs tasks,
-  projects table, broken links; `mdrules check`), at the start and end of each session.
+- `/markode sync` is a different job: it keeps the docs consistent (answered proposals, phases vs tasks,
+  projects table, broken links; `markode check`), at the start and end of each session.
 
 ## 5. Settings
 
-Global per user (`~/.mdrules/settings.json`), opened from the gear in the top bar:
+Global per user (`~/.markode/settings.json`), opened from the gear in the top bar:
 
 | Setting | Values |
 |---|---|
@@ -129,7 +129,7 @@ The same panel holds the project's source language and the user's translation la
 
 - **Sidebar**: tree of .md files, VS Code style.
   - Monorepo: **single tree**; packages with CLAUDE.md/AGENTS.md are marked as projects.
-  - Right click → **ignore** folder or file. Stored in `.mdrulesignore` (committed to the repo).
+  - Right click → **ignore** folder or file. Stored in `.markodeignore` (committed to the repo).
 - **Breadcrumbs** at the top with the selected file's path.
 - **Language switch** (EN / second language) at the top.
 - **Editor panel**: minimal indentation, maximum usable width.
@@ -190,9 +190,9 @@ Phases are created over time as the project evolves; no fixed structure up front
 | id | decision |
 |---|---|
 | D1 | Frontmatter keys and all `.md` files in English |
-| D2 | Tool name `mdrules`; installed with pnpm |
-| D3 | Translation done by the AI via the skill (`/mdrules translate`), no API key |
-| D4 | Translations in `.mdrules/i18n/`, hidden and git-ignored |
+| D2 | Tool name `markode`; installed with pnpm |
+| D3 | Translation done by the AI via the skill (`/markode translate`), no API key |
+| D4 | Translations in `.markode/i18n/`, hidden and git-ignored |
 | D5 | Base `/docs`: `architecture.md`, `rules.md`, `tasks.md`, `decisions.md`, `phases/` |
 | D6 | Palette: dark by default + light theme; one hue per element type (CSS tokens in `web/src/styles.css`) |
 | D7 | Changes view: `git diff` against HEAD grouped by Markdown section |

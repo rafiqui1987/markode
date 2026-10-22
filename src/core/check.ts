@@ -5,7 +5,7 @@ import { summarize } from './dashboard.js'
 import { detectAreas } from './method.js'
 
 /**
- * What `/mdrules sync` keeps consistent in the docs (languages are `/mdrules translate`): answered
+ * What `/markode sync` keeps consistent in the docs (languages are `/markode translate`): answered
  * proposals to apply, phases whose checklist disagrees with their tasks, the "Projects" table against
  * the projects that exist, and links to docs that no longer exist.
  */
@@ -61,12 +61,12 @@ export function checkDocs(root: string): CheckReport {
   return { proposals: docs.filter((d) => d.type === 'proposal' && d.status === 'answered').map((d) => d.path), phases, projects: projectsTable(root), links }
 }
 
-/** The main doc's "Projects" table (written by the mdrules method) against the projects found. */
+/** The main doc's "Projects" table (written by the markode method) against the projects found. */
 function projectsTable(root: string): CheckReport['projects'] {
   const doc = mainDocOf(root)
   if (!doc) return null
   const text = fs.readFileSync(path.join(root, doc), 'utf8')
-  const section = /^### Projects\n([\s\S]*?)(?=^#{1,3} |<!-- mdrules:workflow:end -->)/m.exec(text)?.[1]
+  const section = /^### Projects\n([\s\S]*?)(?=^#{1,3} |<!-- markode:workflow:end -->)/m.exec(text)?.[1]
   if (!section) return null
   const listed = [...section.matchAll(/^\|\s*`([^`]+?)\/?`\s*\|/gm)].map((m) => m[1]).filter((d) => d !== 'docs')
   const found = detectAreas(root).dirs

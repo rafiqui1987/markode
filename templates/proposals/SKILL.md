@@ -1,9 +1,9 @@
 ---
-name: mdrules-proposals
-description: Write temporary proposals the user answers in mdrules (options with ASCII or Mermaid diagrams, choices to tick, comments like in Word), then apply their answer to every affected doc and delete the proposal. Use when an answer would be long or has options or a design to validate, when the user asks for a proposal, or when they say a proposal is answered.
+name: markode-proposals
+description: Write temporary proposals the user answers in markode (options with ASCII or Mermaid diagrams, choices to tick, comments like in Word), then apply their answer to every affected doc and delete the proposal. Use when an answer would be long or has options or a design to validate, when the user asks for a proposal, or when they say a proposal is answered.
 ---
 
-# Proposals (mdrules)
+# Proposals (markode)
 
 A proposal is a **temporary** file for one decision. Write one instead of a chat answer when:
 
@@ -16,11 +16,11 @@ After writing the file:
 
 1. If a task waits on this decision, set it to `status: blocked` with "Next step: waiting on proposal
    <path>".
-2. Start `mdrules wait <path>` **in the background** (in Claude Code, a background Bash command: you are
+2. Start `markode wait <path>` **in the background** (in Claude Code, a background Bash command: you are
    notified when it exits). It waits, without using tokens, until the user presses "Done, send my
-   answer" in mdrules, then prints their answer: choices, open questions, comments waiting for a reply,
+   answer" in markode, then prints their answer: choices, open questions, comments waiting for a reply,
    affected docs and your "After your answer" list. If you can't run background commands, skip it: the
-   user will tell you, or the next `/mdrules sync` finds the answered proposal.
+   user will tell you, or the next `/markode sync` finds the answered proposal.
 3. Tell the user the path in one line and that you will continue when they answer. Meanwhile, keep
    working on anything that doesn't depend on the decision.
 
@@ -36,7 +36,7 @@ lives in the docs it affects and the proposal is deleted.
 ````md
 ---
 type: proposal
-status: open          # open → answered (set by the user in mdrules); deleted once applied
+status: open          # open → answered (set by the user in markode); deleted once applied
 updated: YYYY-MM-DD
 affects: [docs/tasks/T-004-login.md, docs/architecture/auth.md]   # docs the decision will change
 ---
@@ -86,10 +86,10 @@ flowchart LR
 ````
 
 - Diagrams: a ` ```text ` block with box-drawing characters for small sketches, ` ```mermaid ` for
-  flows and sequences. mdrules renders both.
+  flows and sequences. markode renders both.
 - In ASCII diagrams use only single-width characters (box drawing `┌─┐│└┘▶`, letters, `#`, `-`); shading
   blocks like `▓░` are wider in many fonts and break the alignment.
-- `<!-- choose: one -->` right before a checklist makes it single choice in mdrules (radio buttons);
+- `<!-- choose: one -->` right before a checklist makes it single choice in markode (radio buttons);
   without it, any number can be ticked.
 - Put your recommendation first and say why.
 
@@ -109,7 +109,7 @@ Answer each comment with a reply right below it (or below the last reply), same 
   <!-- reply by AI, 2026-10-22: Two Cloud Run instances minimum; added to the architecture. -->
 ```
 
-Never delete or rewrite the user's comments: they resolve them in mdrules. Never put `-->` inside a
+Never delete or rewrite the user's comments: they resolve them in markode. Never put `-->` inside a
 comment's text.
 
 - `affects`: the docs that depend on this decision (tasks, phases, architecture, vision, other
@@ -119,11 +119,11 @@ comment's text.
 
 1. Read the ticked options, the open questions and every comment without a reply from you.
 2. If something is unclear or a comment raises a new question, reply to that comment, set
-   `status: open` again, tell the user what you need, and start `mdrules wait` again. Don't apply
+   `status: open` again, tell the user what you need, and start `markode wait` again. Don't apply
    anything yet.
 3. Otherwise apply the decision to every doc that depends on it: the ones in `affects` and any other
    you find (a task's goal or acceptance criteria, a phase's task list, an architecture table, the
-   vision…). Record it in its one place: in the mdrules method, the architecture file for design
+   vision…). Record it in its one place: in the markode method, the architecture file for design
    decisions, and a line in the log of the task it belongs to (`<date>: decided <what> (proposal
    <name>)`).
 4. Delete the proposal file: it was temporary, the decision now lives in those docs. A task that was

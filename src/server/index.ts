@@ -121,7 +121,7 @@ export async function startServer({ root, port, open: openBrowser }: Options) {
         for (const [code, name] of Object.entries(body.langNames))
           if (isLangCode(code) && !isLang(code) && typeof name === 'string' && name.trim()) c.langNames = { ...c.langNames, [code]: name.trim().slice(0, 40) }
       if (isLang(body.sourceLang) && body.sourceLang !== sourceLang()) {
-        if (!c.mainDoc) throw new HttpError(400, 'No main document configured; run `mdrules init`')
+        if (!c.mainDoc) throw new HttpError(400, 'No main document configured; run `markode init`')
         applyRulesToFile(path.join(root, c.mainDoc), undefined, body.sourceLang)
       }
       // Kept as chosen; the source language is filtered out wherever it is read.
@@ -133,9 +133,9 @@ export async function startServer({ root, port, open: openBrowser }: Options) {
       else deactivateProposals(root, config().mainDoc)
       return proposalsState(root)
     },
-    /** Translation files behind their source, in every enabled language: work for `/mdrules translate`. */
+    /** Translation files behind their source, in every enabled language: work for `/markode translate`. */
     'GET /api/translations': () => ({ pending: syncReport(root).files.filter((f) => f.status !== 'synced').length + foreignFiles(root, sourceLang()).length }),
-    /** Proposals an agent is waiting on (`mdrules wait`): answering them wakes it up. */
+    /** Proposals an agent is waiting on (`markode wait`): answering them wakes it up. */
     'GET /api/waiting': () => ({ paths: waitingOn(root) }),
     'GET /api/settings': () => readSettings(),
     'PUT /api/settings': (_, body) => writeSettings(body),
@@ -242,7 +242,7 @@ export async function startServer({ root, port, open: openBrowser }: Options) {
     },
     'POST /api/rules/apply': (_, body) => {
       const mainDoc = readConfig(root)?.mainDoc
-      if (!mainDoc) throw new HttpError(400, 'No main document configured; run `mdrules init`')
+      if (!mainDoc) throw new HttpError(400, 'No main document configured; run `markode init`')
       applyRulesToFile(path.join(root, mainDoc), body.ids ?? [])
       return { ok: true }
     },
@@ -303,9 +303,9 @@ export async function startServer({ root, port, open: openBrowser }: Options) {
     ignorePermissionErrors: true,
     ignored: (p, stats) => {
       const rel = toPosix(path.relative(root, p))
-      // .mdrules is skipped by the scan, but translations and sync state live there.
-      if (rel === '.mdrules') return false
-      if (rel.startsWith('.mdrules/')) return !rel.startsWith('.mdrules/i18n') && rel !== '.mdrules/state.json' && rel !== '.mdrules/config.json'
+      // .markode is skipped by the scan, but translations and sync state live there.
+      if (rel === '.markode') return false
+      if (rel.startsWith('.markode/')) return !rel.startsWith('.markode/i18n') && rel !== '.markode/state.json' && rel !== '.markode/config.json'
       return skips(rel, stats ? stats.isDirectory() : undefined)
     },
   })
@@ -313,15 +313,15 @@ export async function startServer({ root, port, open: openBrowser }: Options) {
     .on('error', (err) => console.warn(pc.yellow(`  file watcher: ${(err as Error).message}`)))
     .on('all', (event, file) => {
       const abs = path.resolve(file)
-      if (!abs.endsWith('.md') && !abs.endsWith('.json') && !abs.endsWith('.mdrulesignore') && event !== 'addDir' && event !== 'unlinkDir') return
+      if (!abs.endsWith('.md') && !abs.endsWith('.json') && !abs.endsWith('.markodeignore') && event !== 'addDir' && event !== 'unlinkDir') return
       let rel = toPosix(path.relative(root, abs))
       const i18n = toPosix(path.relative(root, path.join(stateDir(root), 'i18n')))
-      if (rel.startsWith(i18n + '/')) rel = rel.split('/').slice(3).join('/') // .mdrules/i18n/<lang>/<path>
+      if (rel.startsWith(i18n + '/')) rel = rel.split('/').slice(3).join('/') // .markode/i18n/<lang>/<path>
       broadcast({ type: 'fs', event, path: rel })
     })
 
   const url = `http://localhost:${actualPort}`
-  console.log(`\n  ${pc.bold('mdrules')} ${pc.dim('→')} ${pc.cyan(url)}  ${pc.dim(root)}\n`)
+  console.log(`\n  ${pc.bold('markode')} ${pc.dim('→')} ${pc.cyan(url)}  ${pc.dim(root)}\n`)
   if (!fs.existsSync(WEB_DIR)) console.log(pc.yellow('  Web UI not built: run `pnpm build`, or `pnpm dev` and open http://localhost:4320\n'))
   else if (openBrowser) open(url).catch(() => {})
 }

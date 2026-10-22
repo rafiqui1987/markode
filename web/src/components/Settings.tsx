@@ -52,7 +52,7 @@ const SECTIONS: { id: SettingsSection; icon: typeof Type; label: 'settings.gener
   { id: 'proposals', icon: MessageSquare, label: 'settings.proposals' },
 ]
 
-/** A command for the agent with a button that copies it, e.g. `/mdrules translate`. */
+/** A command for the agent with a button that copies it, e.g. `/markode translate`. */
 export function CopyCommand({ command, t }: { command: string; t: T }) {
   const [copied, setCopied] = useState(false)
   return (
@@ -226,7 +226,7 @@ export function Settings({ t, section: initialSection, theme, onTheme, info, set
               </div>
               <p className="set-hint">{t('settings.wrapHint')}</p>
               <div className="set-preview">
-                <div className="set-preview-h">mdrules</div>
+                <div className="set-preview-h">markode</div>
                 <p>{t('settings.preview')}</p>
               </div>
             </section>
@@ -260,7 +260,7 @@ export function Settings({ t, section: initialSection, theme, onTheme, info, set
               <p className="set-hint">{t('settings.translationsHint')}</p>
               {info.langs.length > 0 && pendingTranslations > 0 && (
                 <div className="set-callout">
-                  {t('settings.toTranslate', { n: pendingTranslations })} <CopyCommand command="/mdrules translate" t={t} />
+                  {t('settings.toTranslate', { n: pendingTranslations })} <CopyCommand command="/markode translate" t={t} />
                 </div>
               )}
             </section>

@@ -7,12 +7,12 @@ import { writeManagedBlock } from './sdd.js'
 
 /**
  * Proposals and comments: the AI writes choices as a doc (diagrams, options to tick) and the user
- * answers in mdrules, commenting like in Word. Active when the project has the proposals skill, so
+ * answers in markode, commenting like in Word. Active when the project has the proposals skill, so
  * the whole team (and their agents) share the setting through git.
  */
 export type ProposalLayout = 'general' | 'structured'
 
-const SKILL = path.join('.claude', 'skills', 'mdrules-proposals')
+const SKILL = path.join('.claude', 'skills', 'markode-proposals')
 
 export function proposalsState(root: string): { active: boolean; layout: ProposalLayout } {
   return { active: fs.existsSync(path.join(root, SKILL, 'SKILL.md')), layout: readConfig(root)?.proposals ?? 'general' }
@@ -29,10 +29,10 @@ function section(layout: ProposalLayout) {
     '## Proposals',
     '',
     'When an answer would be long, has options or a design to validate, or the user asks for one, write a',
-    'temporary proposal the user answers in mdrules instead of a chat answer (skill: `mdrules-proposals`).',
+    'temporary proposal the user answers in markode instead of a chat answer (skill: `markode-proposals`).',
     '',
     `- Where: ${WHERE[layout]}.`,
-    '- After writing one, run `mdrules wait <path>` in the background: it returns when the user answers in mdrules.',
+    '- After writing one, run `markode wait <path>` in the background: it returns when the user answers in markode.',
     '- The user ticks options and comments (`<!-- comment by … -->`). When it is answered, reply to the comments,',
     '  update every doc that depends on the decision (tasks, phases, architecture…), then delete the proposal.',
   ].join('\n')

@@ -9,21 +9,21 @@ import { startServer } from '../server/index.js'
 import { runInit, runSetup } from './init.js'
 import { runTranslate } from './translate.js'
 
-const HELP = `mdrules — visual editor for your project's Markdown
+const HELP = `markode — visual editor for your project's Markdown
 
 Usage
-  mdrules                 init if needed, then open the editor
-  mdrules init            (re)run the project setup: main doc, specs structure, rules, languages
-  mdrules setup           choose how projects are set up: with your saved answers, or asking each time
-  mdrules serve           open the editor without running init
-  mdrules translate       choose languages to review the docs in (or: mdrules --translate)
-  mdrules check [--json]  what /mdrules sync fixes: answered proposals, phases vs tasks, projects table, broken links
-  mdrules wait <proposal> wait until the user answers a proposal in mdrules, then print the answer
+  markode                 init if needed, then open the editor
+  markode init            (re)run the project setup: main doc, specs structure, rules, languages
+  markode setup           choose how projects are set up: with your saved answers, or asking each time
+  markode serve           open the editor without running init
+  markode translate       choose languages to review the docs in (or: markode --translate)
+  markode check [--json]  what /markode sync fixes: answered proposals, phases vs tasks, projects table, broken links
+  markode wait <proposal> wait until the user answers a proposal in markode, then print the answer
 
-For the agent's /mdrules translate:
-  mdrules translate --status [--json]                    translations + files not in the source language
-  mdrules translate --mark [--lang xx] <path...>|--all   record translations as in sync
-  mdrules translate --keep <path...>                     keep files in their current language
+For the agent's /markode translate:
+  markode translate --status [--json]                    translations + files not in the source language
+  markode translate --mark [--lang xx] <path...>|--all   record translations as in sync
+  markode translate --keep <path...>                     keep files in their current language
 
 Options
   -D           first run: skip saving defaults; every project asks its own questions
@@ -39,7 +39,7 @@ const option = (name: string) => {
   return i >= 0 ? args[i + 1] : undefined
 }
 const command = args[0] && !args[0].startsWith('-') ? args[0] : 'start'
-const root = process.env.MDRULES_ROOT ?? process.cwd()
+const root = process.env.MARKODE_ROOT ?? process.cwd()
 
 async function main() {
   if (flag('--help') || flag('-h')) return console.log(HELP)
@@ -93,7 +93,7 @@ function check() {
 async function wait() {
   const rel = args[1]
   if (!rel || !fs.existsSync(path.join(root, rel))) {
-    console.error(`Usage: mdrules wait <proposal.md> (relative to ${root})`)
+    console.error(`Usage: markode wait <proposal.md> (relative to ${root})`)
     process.exitCode = 1
     return
   }

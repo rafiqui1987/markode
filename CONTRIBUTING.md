@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for your interest in mdrules! Issues and pull requests are welcome.
+Thanks for your interest in markode! Issues and pull requests are welcome.
 
 ## Setup
 

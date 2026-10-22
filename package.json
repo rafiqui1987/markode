@@ -1,5 +1,5 @@
 {
-  "name": "mdrules",
+  "name": "markode",
   "version": "0.2.6",
   "description": "Visual editor for CLAUDE.md, AGENTS.md and /docs — humans edit comfortably, the AI keeps reading plain Markdown.",
   "keywords": [
@@ -15,19 +15,19 @@
     "mermaid",
     "cli"
   ],
-  "homepage": "https://github.com/rafiqui1987/mdrules#readme",
+  "homepage": "https://github.com/rafiqui1987/markode#readme",
   "bugs": {
-    "url": "https://github.com/rafiqui1987/mdrules/issues"
+    "url": "https://github.com/rafiqui1987/markode/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/rafiqui1987/mdrules.git"
+    "url": "git+https://github.com/rafiqui1987/markode.git"
   },
   "license": "MIT",
   "author": "rafiqui1987",
   "type": "module",
   "bin": {
-    "mdrules": "./dist/cli.js"
+    "markode": "./dist/cli.js"
   },
   "files": [
     "dist",

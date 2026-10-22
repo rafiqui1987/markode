@@ -1,21 +1,21 @@
-# mdrules
+# markode
 
-[![CI](https://github.com/rafiqui1987/mdrules/actions/workflows/ci.yml/badge.svg)](https://github.com/rafiqui1987/mdrules/actions/workflows/ci.yml)
+[![CI](https://github.com/rafiqui1987/markode/actions/workflows/ci.yml/badge.svg)](https://github.com/rafiqui1987/markode/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 **See and edit every Markdown file in your project in one place: no split screen, no raw syntax in the
 way.**
 
-Run `mdrules` in any repository and it opens all its `.md` files (`README.md`, `CLAUDE.md`, `AGENTS.md`,
+Run `markode` in any repository and it opens all its `.md` files (`README.md`, `CLAUDE.md`, `AGENTS.md`,
 `docs/`…) in a single editor that is also the preview. Tables, Mermaid diagrams, checklists and math
 render as you type, and change in place. Files are saved exactly as written, never reformatted, so Git
 diffs stay clean and AI agents keep reading plain Markdown.
 
-**Why it exists:** [write less, point better](#the-mdrules-philosophy).
+**Why it exists:** [write less, point better](#the-markode-philosophy).
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/screenshot-dark.png">
-  <img alt="mdrules editor: a repository with a front end and a back end, each with its own tasks; a phase listing tasks from both, a comment thread like in Word and a Mermaid diagram" src="docs/assets/screenshot-light.png">
+  <img alt="markode editor: a repository with a front end and a back end, each with its own tasks; a phase listing tasks from both, a comment thread like in Word and a Mermaid diagram" src="docs/assets/screenshot-light.png">
 </picture>
 
 ## Quick start
@@ -23,26 +23,26 @@ diffs stay clean and AI agents keep reading plain Markdown.
 Requires Node.js 20 or newer. From the root of any project (monorepos included):
 
 ```bash
-npx mdrules
+npx markode
 ```
 
-The very first time, mdrules asks how you want your projects set up:
+The very first time, markode asks how you want your projects set up:
 
 - **With your answers** (default): answer once (main doc, how to plan the work, the language you
-  work in, rules…). They are saved in `~/.mdrules/defaults.json` and every new project is set up
-  with them, without questions. For a project that needs something else: `mdrules init --custom`.
-- **Ask in each project**: run `mdrules -D` the first time. Each project asks its own questions.
+  work in, rules…). They are saved in `~/.markode/defaults.json` and every new project is set up
+  with them, without questions. For a project that needs something else: `markode init --custom`.
+- **Ask in each project**: run `markode -D` the first time. Each project asks its own questions.
 
-Change your choice any time with `mdrules setup`. Then the editor opens at `http://localhost:4319`;
+Change your choice any time with `markode setup`. Then the editor opens at `http://localhost:4319`;
 it only listens on `127.0.0.1`.
 
-## The mdrules philosophy
+## The markode philosophy
 
 **Write less, point better.**
 
 Most `CLAUDE.md` files grow into hundreds of lines: generic advice the agent already follows, folder
 listings it can read by itself, the same decision copied in three places. It costs tokens, the agent
-still searches the whole repository, and nobody keeps it up to date. mdrules turns the docs into a
+still searches the whole repository, and nobody keeps it up to date. markode turns the docs into a
 **map** and a **memory**:
 
 - **No filler.** Write only what the code can't tell: decisions and why, hidden conventions, the state
@@ -65,19 +65,19 @@ front/
 ```
 
 Yesterday you worked in `service/` and `front/`. Today you ask the agent *"what's pending?"*
-(`/mdrules-status`). It reads the map, scans only the task files of each project, and answers:
+(`/markode-status`). It reads the map, scans only the task files of each project, and answers:
 SVC-007 is in progress and its next step is the retry; FRO-012 is blocked on it; phase 2 has four
 pending tasks; and one change in `front/` isn't covered by any task. No digging through the code, no
 explaining it all again.
 
-mdrules can't force an agent to follow the map, but it makes the right path the shortest one.
+markode can't force an agent to follow the map, but it makes the right path the shortest one.
 
 ## What it does
 
 ### 1. Every Markdown file of the project, in one place
 
 A file tree with every `.md` in the folder where you run it, folders first. Search, expand or collapse
-all, create files and folders inline, hide what you don't need (`.mdrulesignore`) and delete from the
+all, create files and folders inline, hide what you don't need (`.markodeignore`) and delete from the
 right-click menu. Resize the sidebar by dragging its edge, or hide it for more room.
 
 ### 2. Edit and view at the same time
@@ -111,13 +111,13 @@ Most AI agents, and most teams, work best with docs in English. If English isn't
 don't have to choose:
 
 - Add a language to review the docs in, from **Settings → Document languages** or with
-  `mdrules translate`: Spanish, French, Portuguese, German or Italian, or **type any other** (Japanese,
-  Dutch…). Then ask your agent for **`/mdrules translate`** (mdrules has a button to copy it), and
-  mdrules shows **every doc in that language**. Read the architecture, tick tasks, write notes and fix
+  `markode translate`: Spanish, French, Portuguese, German or Italian, or **type any other** (Japanese,
+  Dutch…). Then ask your agent for **`/markode translate`** (markode has a button to copy it), and
+  markode shows **every doc in that language**. Read the architecture, tick tasks, write notes and fix
   a rule, all in your language.
 - The files in the repository **stay in one source language** (English by default), so the agent and
   the rest of the team keep reading one consistent version.
-- Your edits are kept as a translation until you ask for `/mdrules translate` again. Before changing
+- Your edits are kept as a translation until you ask for `/markode translate` again. Before changing
   a source file, the agent lists what would change and applies only what you approve. The top bar
   shows how many docs are behind, and copies the command when clicked.
 - Translating is always on purpose: it never happens as a side effect of other work.
@@ -125,12 +125,12 @@ don't have to choose:
   French, Portuguese, German or Italian in **Settings → General**.
 
 Example: you open `docs/tasks/T-004-login.md` in Spanish, add an acceptance criterion and tick two
-others. After `/mdrules translate` and your OK, the English file has the new criterion and the ticks,
+others. After `/markode translate` and your OK, the English file has the new criterion and the ticks,
 and the agent works from it.
 
 ### 6. A method to plan and follow the work
 
-`mdrules init` offers the **mdrules method**, a way of organizing the project so that you and the
+`markode init` offers the **markode method**, a way of organizing the project so that you and the
 agent always know what is being built, how, and what comes next:
 
 ```tree
@@ -150,7 +150,7 @@ flowchart LR
 ```
 
 - **It starts small**: the setup creates only the task folder and its template. The agent creates the
-  vision, architecture and phase docs from templates (skill `mdrules-method`) when there is something
+  vision, architecture and phase docs from templates (skill `markode-method`) when there is something
   to write. A task's status lives only in its file: there is no index to keep in sync.
 - **It knows what kind of project it is**, and asks only what that kind needs. When the files don't
   make it clear, it asks:
@@ -168,18 +168,18 @@ flowchart LR
   folders of repositories; and if the project already has docs, it asks which are the official ones
   and points the agent to them instead of creating new ones.
 - **The main doc stays short** and points to `docs/`. If `CLAUDE.md` or `AGENTS.md` already exist,
-  they are not rewritten: mdrules adds a "Workflow" section with the map and the session routine.
+  they are not rewritten: markode adds a "Workflow" section with the map and the session routine.
 - **Each fact lives in one place**: decisions in `architecture/`, progress in the task files.
 - **Sessions pick up where they stopped**: the agent looks for tasks `in-progress`, reads their "Next
-  step" and tells you where you left off. `/mdrules-status` sums up what is in progress, blocked and
-  pending, per project; `/mdrules-new-task` creates a task in the right place; and
-  `/mdrules-close-session` logs what was done, the next step and the status.
+  step" and tells you where you left off. `/markode-status` sums up what is in progress, blocked and
+  pending, per project; `/markode-new-task` creates a task in the right place; and
+  `/markode-close-session` logs what was done, the next step and the status.
 - **Monorepos**: each project (`apps/web`, `services/api`… or each repository in a folder of repos)
   gets its own short `CLAUDE.md`/`AGENTS.md`, tasks with its own prefix (`WEB-001`, `API-001`),
   proposals and, with its first decision, a `docs/ARCHITECTURE.md`. The root main doc is the
   overview: a table of the projects, what each one is and where its docs live. The root `docs/` holds
   vision, phases and work across projects (`CORE-001`). The agent reads only the project it is
-  working on. A project's existing `CLAUDE.md`/`AGENTS.md` is kept as is: mdrules only adds a short
+  working on. A project's existing `CLAUDE.md`/`AGENTS.md` is kept as is: markode only adds a short
   block pointing to its docs. Where there is only `AGENTS.md` and you use Claude Code, it adds a
   one-line `CLAUDE.md` that imports it (`@AGENTS.md`), since Claude Code reads `CLAUDE.md`.
 - **The Dashboard** shows each phase with its progress and tasks, and a board of what is in progress,
@@ -192,16 +192,16 @@ flowchart LR
 | **[OpenSpec](https://github.com/Fission-AI/OpenSpec)** | `openspec/` with specs and proposed changes; the dashboard shows each change and its tasks |
 | **[GitHub Spec Kit](https://github.com/github/spec-kit)** | a constitution and one folder per feature (spec → plan → tasks); the dashboard shows what each has |
 
-mdrules runs their official installer, which also adds their commands to your agent (`/opsx:*`,
+markode runs their official installer, which also adds their commands to your agent (`/opsx:*`,
 `/speckit-*`). If it can't (Spec Kit needs [uv](https://docs.astral.sh/uv/)), it creates a compatible
 structure with a guide on how to add them later. Projects that already use either are detected and
-shown as they are. Choose **None** and mdrules adds no structure or workflow at all.
+shown as they are. Choose **None** and markode adds no structure or workflow at all.
 
 ### 7. Proposals and comments: answer the AI with clicks
 
 When an answer would be long or has options to choose from (or when you ask for one), the agent writes
 a **proposal** instead of a long chat message: options with small ASCII or Mermaid diagrams, choices to
-tick, open questions, and the docs the decision will change. You answer in mdrules:
+tick, open questions, and the docs the decision will change. You answer in markode:
 
 ```text
  ┌ Proposal: Authentication ─────────────────────────────┐
@@ -235,14 +235,14 @@ tick, open questions, and the docs the decision will change. You answer in mdrul
 - In a monorepo, proposals are organized **by project and topic** (`apps/web/docs/proposals/auth/…`);
   in a big single project they can be organized by topic instead of one folder.
 
-It comes with the mdrules method, and can be turned on or off for any project in **Settings**.
+It comes with the markode method, and can be turned on or off for any project in **Settings**.
 
 ### 8. Your AI agent's skills
 
 The **Skills** tab lists every global skill you have for Claude Code, Codex, Gemini, Copilot or Cursor
 ([Agent Skills](https://agentskills.io) format). Tag them to group them, expand one to read or edit its
 `SKILL.md`, see problems that would stop an agent from loading it, and **add it to the current project**
-(`.claude/skills/` and/or `.agents/skills/`). Tags are stored in `~/.mdrules/skills.json`, never in the
+(`.claude/skills/` and/or `.agents/skills/`). Tags are stored in `~/.markode/skills.json`, never in the
 skill.
 
 ### 9. Also included
@@ -251,7 +251,7 @@ skill.
 - **Rules**: your library of reusable rules, written into `CLAUDE.md` or `AGENTS.md` where you apply
   them. It starts with common ones for AI agents (ask before committing, verify before saying it's done,
   minimal changes, protect secrets…); edit them and add your own. The setup applies none unless you
-  choose them. The library lives in `~/.mdrules/rules/`.
+  choose them. The library lives in `~/.markode/rules/`.
 - **Settings**, by section: General (interface language, theme), Editor (font, size, line spacing,
   margins, line width, wrapping), Document languages and Proposals.
 
@@ -271,59 +271,59 @@ skill.
 ## Commands
 
 ```bash
-mdrules                     # set up the project if needed, then open the editor
-mdrules init                # run the setup again (with your defaults, if you saved them)
-mdrules init --custom       # set up this project with its own answers
-mdrules setup               # change your defaults, or switch to asking in each project
-mdrules -D                  # first run: don't save defaults, ask in each project
-mdrules serve               # open the editor without the setup
-mdrules serve --port 5000 --no-open
-mdrules translate           # choose languages to review the docs in (also: mdrules --translate)
+markode                     # set up the project if needed, then open the editor
+markode init                # run the setup again (with your defaults, if you saved them)
+markode init --custom       # set up this project with its own answers
+markode setup               # change your defaults, or switch to asking in each project
+markode -D                  # first run: don't save defaults, ask in each project
+markode serve               # open the editor without the setup
+markode serve --port 5000 --no-open
+markode translate           # choose languages to review the docs in (also: markode --translate)
 ```
 
-To keep it installed: `npm install -g mdrules` (or `pnpm add -g mdrules`).
+To keep it installed: `npm install -g markode` (or `pnpm add -g markode`).
 
 ## For AI agents
 
-`mdrules init` installs `.claude/skills/mdrules/SKILL.md`, which tells the agent how to write Markdown
-that mdrules presents well, and gives it two commands:
+`markode init` installs `.claude/skills/markode/SKILL.md`, which tells the agent how to write Markdown
+that markode presents well, and gives it two commands:
 
 | Command | What the agent does | When |
 |---|---|---|
-| `/mdrules sync` | Keeps the docs consistent: applies answered proposals, ticks phases from their tasks, checks the projects table and broken links (`mdrules check`) | Start and end of a session, after editing docs |
-| `/mdrules translate` | Translates what is behind; asks before changing any source file | Only when you ask |
+| `/markode sync` | Keeps the docs consistent: applies answered proposals, ticks phases from their tasks, checks the projects table and broken links (`markode check`) | Start and end of a session, after editing docs |
+| `/markode translate` | Translates what is behind; asks before changing any source file | Only when you ask |
 
 It also writes into the main doc:
 
-- the working rules you picked, between `<!-- mdrules:rules:start -->` and `<!-- mdrules:rules:end -->`;
-- how the project plans its work (the mdrules method, OpenSpec or Spec Kit), between
-  `<!-- mdrules:workflow:start -->` and `<!-- mdrules:workflow:end -->`. With the mdrules method it
-  also installs the `mdrules-new-task` and `mdrules-close-session` skills.
+- the working rules you picked, between `<!-- markode:rules:start -->` and `<!-- markode:rules:end -->`;
+- how the project plans its work (the markode method, OpenSpec or Spec Kit), between
+  `<!-- markode:workflow:start -->` and `<!-- markode:workflow:end -->`. With the markode method it
+  also installs the `markode-new-task` and `markode-close-session` skills.
 - with proposals on, how the agent writes proposals and answers comments (skill
-  `mdrules-proposals`), between `<!-- mdrules:proposals:start -->` and `<!-- mdrules:proposals:end -->`.
+  `markode-proposals`), between `<!-- markode:proposals:start -->` and `<!-- markode:proposals:end -->`.
 
-When the agent writes a proposal, it runs `mdrules wait <proposal>` in the background: it waits
-without using tokens until you press "Done, send my answer" in mdrules, then hands the agent your
+When the agent writes a proposal, it runs `markode wait <proposal>` in the background: it waits
+without using tokens until you press "Done, send my answer" in markode, then hands the agent your
 choices, open questions and comments, and the agent continues by itself. If no session was open, the
 next one applies the answer first.
 
 ```bash
-mdrules check [--json]                                # what /mdrules sync fixes
-mdrules wait <proposal.md>                            # wait for the user's answer, then print it
-mdrules translate --status [--json]                   # translations + files not in the source language
-mdrules translate --mark [--lang xx] <path...>|--all  # record translations as in sync
-mdrules translate --keep <path...>                    # keep files in their current language
+markode check [--json]                                # what /markode sync fixes
+markode wait <proposal.md>                            # wait for the user's answer, then print it
+markode translate --status [--json]                   # translations + files not in the source language
+markode translate --mark [--lang xx] <path...>|--all  # record translations as in sync
+markode translate --keep <path...>                    # keep files in their current language
 ```
 
 ## Uninstall
 
 ```bash
-npm uninstall -g mdrules    # or: pnpm remove -g mdrules (use the one you installed it with)
+npm uninstall -g markode    # or: pnpm remove -g markode (use the one you installed it with)
 ```
 
-To remove it from a project, delete `.mdrules/` and `.claude/skills/mdrules*/`, the `.mdrules/` line in
-`.gitignore`, and the `mdrules:rules`, `mdrules:workflow` and `mdrules:proposals` blocks in your main doc (keep the text
-inside if you still want it). Editor settings, rule presets and skill tags live in `~/.mdrules`.
+To remove it from a project, delete `.markode/` and `.claude/skills/markode*/`, the `.markode/` line in
+`.gitignore`, and the `markode:rules`, `markode:workflow` and `markode:proposals` blocks in your main doc (keep the text
+inside if you still want it). Editor settings, rule presets and skill tags live in `~/.markode`.
 
 ## Development
 

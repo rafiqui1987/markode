@@ -59,7 +59,7 @@ export function skillSources() {
   return (Object.keys(SOURCE_DIRS) as SkillSource[]).map((id) => ({ id, path: display(sourceDir(id)), exists: fs.existsSync(sourceDir(id)) }))
 }
 
-// ------------------------------------------------------------ tags (~/.mdrules/skills.json, never the skill itself)
+// ------------------------------------------------------------ tags (~/.markode/skills.json, never the skill itself)
 
 const tagsFile = () => path.join(GLOBAL_DIR, 'skills.json')
 

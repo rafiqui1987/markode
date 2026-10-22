@@ -8,7 +8,7 @@ import { findSubprojects, scanTree } from './scan.js'
 import { writeManagedBlock } from './sdd.js'
 
 /**
- * The mdrules method: a short main doc that points to docs/ (vision, architecture, phases, one file per
+ * The markode method: a short main doc that points to docs/ (vision, architecture, phases, one file per
  * task with an index). In a monorepo each project (an "area": `apps/web`, `services/api`…) gets the same
  * docs for its own work and its own main doc; the root main doc is the overview of all of them.
  */
@@ -187,21 +187,21 @@ export function methodSection(areas: Area[], root?: string, ctx: MethodContext =
     ? ['', '### Existing docs', '', 'These are the official docs: update them instead of creating new ones in their place.', '', ...ctx.existing.map((d) => `- \`${d}\``)]
     : []
   return [
-    '## Workflow (mdrules method)',
+    '## Workflow (markode method)',
     '',
-    'Docs are created when there is something real to write (where each thing goes and templates: skill `mdrules-method`): vision `docs/vision.md` · architecture `docs/architecture/` · phases `docs/phases/` · tasks `docs/tasks/`.',
+    'Docs are created when there is something real to write (where each thing goes and templates: skill `markode-method`): vision `docs/vision.md` · architecture `docs/architecture/` · phases `docs/phases/` · tasks `docs/tasks/`.',
     ...about,
     ...map,
     ...existing,
     '',
     '### Session start',
     '',
-    '1. `/mdrules sync`: apply proposals the user answered while no session was open, and fix what is out of date.',
+    '1. `/markode sync`: apply proposals the user answered while no session was open, and fix what is out of date.',
     `2. Find tasks in progress: \`grep -rl "^status: in-progress" --include=*.md ${taskDirs}\`.`,
     '3. Open the one with the most recent `updated`, read its "Next step" and tell the user in one line where we left off.',
     '4. If there are none, ask the user what to work on.',
     '',
-    'When the user asks what is pending or where things stand: `/mdrules-status`.',
+    'When the user asks what is pending or where things stand: `/markode-status`.',
     '',
     '### During the session',
     '',
@@ -211,9 +211,9 @@ export function methodSection(areas: Area[], root?: string, ctx: MethodContext =
     '',
     '### Tasks',
     '',
-    '- The user defines tasks: propose them, but create them only when asked (`/mdrules-new-task`).',
+    '- The user defines tasks: propose them, but create them only when asked (`/markode-new-task`).',
     `- One task = one file in ${areas.length ? '`<project>/docs/tasks/`; tasks across projects in `docs/tasks/`' : '`docs/tasks/`'}, prefix \`${rootPrefix(areas)}\`${areas.length ? ' at the root' : ''}. Its status lives only in its frontmatter; each phase lists its tasks.`,
-    '- At the end of a session: `/mdrules-close-session` (it ends with `/mdrules sync`).',
+    '- At the end of a session: `/markode-close-session` (it ends with `/markode sync`).',
     '',
     '### Documentation without redundancy',
     '',

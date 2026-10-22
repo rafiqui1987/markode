@@ -8,7 +8,7 @@ export const LANGS: Lang[] = ['en', 'es', 'fr', 'pt', 'de', 'it']
 export const LANG_NAMES: Record<Lang, string> = { en: 'English', es: 'Español', fr: 'Français', pt: 'Português', de: 'Deutsch', it: 'Italiano' }
 export const DEFAULT_SOURCE: Lang = 'en'
 export const isLang = (v: unknown): v is Lang => LANGS.includes(v as Lang)
-/** A translation language: one of LANGS, or any code the user added with `mdrules translate` (e.g. `ja`). */
+/** A translation language: one of LANGS, or any code the user added with `markode translate` (e.g. `ja`). */
 export const isLangCode = (v: unknown): v is string => typeof v === 'string' && /^[a-z]{2,3}(-[a-z0-9]{2,8})?$/i.test(v)
 /** Display name of a language code: built-in, or the name given when it was added. */
 export const langName = (code: string, config?: ProjectConfig | null) => (isLang(code) ? LANG_NAMES[code] : (config?.langNames?.[code] ?? code))
@@ -47,7 +47,7 @@ export interface ProjectConfig {
   /** Names of languages added by hand (`ja` → `Japanese`); the AI translates into them by name. */
   langNames?: Record<string, string>
   /** Specs and planning structure chosen at init (see core/sdd.ts). */
-  workflow?: 'none' | 'mdrules' | 'openspec' | 'speckit'
+  workflow?: 'none' | 'markode' | 'openspec' | 'speckit'
   /** How proposals are organized, once activated (see core/proposals.ts). */
   proposals?: 'general' | 'structured'
   initializedAt?: string
@@ -64,9 +64,9 @@ export const TEMPLATES_DIR = path.join(PKG_ROOT, 'templates')
 export const WEB_DIR = path.join(PKG_ROOT, 'dist', 'web')
 
 /** Global, per-user storage (rule presets). */
-export const GLOBAL_DIR = process.env.MDRULES_HOME ?? path.join(os.homedir(), '.mdrules')
+export const GLOBAL_DIR = process.env.MARKODE_HOME ?? path.join(os.homedir(), '.markode')
 
-export const stateDir = (root: string) => path.join(root, '.mdrules')
+export const stateDir = (root: string) => path.join(root, '.markode')
 const configFile = (root: string) => path.join(stateDir(root), 'config.json')
 
 export function readConfig(root: string): ProjectConfig | null {
@@ -105,7 +105,7 @@ export interface EditorSettings {
   width: 'full' | 'readable'
   /** Wrap long lines; when false, long lines and wide tables scroll horizontally. */
   wrap: boolean
-  /** Language of mdrules' own menus; independent of the language the docs are written in. */
+  /** Language of markode' own menus; independent of the language the docs are written in. */
   uiLang: string
 }
 

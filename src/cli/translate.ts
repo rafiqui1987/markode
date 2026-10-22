@@ -15,17 +15,17 @@ const OTHER = '__other__'
 
 /**
  * Pick the languages to review the docs in. The files stay in the source language; translations are
- * written by the AI (`/mdrules translate`). A language not built in can be typed: the AI translates the docs
+ * written by the AI (`/markode translate`). A language not built in can be typed: the AI translates the docs
  * into it, and the interface stays in English.
  */
 export async function runTranslate(root: string) {
   const config = readConfig(root)
   if (!config) {
-    console.log(`Run ${pc.cyan('mdrules init')} first.`)
+    console.log(`Run ${pc.cyan('markode init')} first.`)
     process.exitCode = 1
     return
   }
-  p.intro(pc.bgCyan(pc.black(' mdrules translate ')))
+  p.intro(pc.bgCyan(pc.black(' markode translate ')))
   const source = projectSourceLang(root, config.mainDoc)
   const custom = config.langs.filter((l) => !isLang(l))
   const picked = check(
@@ -61,13 +61,13 @@ export async function runTranslate(root: string) {
 
   writeConfig(root, { ...config, langs, langNames: names })
   if (!langs.length) {
-    p.outro('No translation languages: mdrules shows the docs in their source language only.')
+    p.outro('No translation languages: markode shows the docs in their source language only.')
     return
   }
   p.outro(
     [
       `Translations: ${langs.map((l) => langName(l, { ...config, langNames: names })).join(', ')}.`,
-      `Ask your agent for ${pc.cyan('/mdrules translate')} to translate the docs; then pick the language at the top of mdrules.`,
+      `Ask your agent for ${pc.cyan('/markode translate')} to translate the docs; then pick the language at the top of markode.`,
       ...(langs.some((l) => !isLang(l)) ? ['Menus stay in English for languages typed by hand.'] : []),
     ].join('\n'),
   )

@@ -32,7 +32,7 @@ export interface Info {
   /** Display name of every enabled language code. */
   langNames: Record<string, string>
   git: boolean
-  /** Proposals and comments: on when the project has the mdrules-proposals skill. */
+  /** Proposals and comments: on when the project has the markode-proposals skill. */
   proposals: { active: boolean; layout: ProposalLayout }
   /** Signs comments (git user.name); null when unknown. */
   author: string | null

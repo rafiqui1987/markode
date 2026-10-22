@@ -4,7 +4,7 @@ import { GLOBAL_DIR, isLang, type Lang, MAIN_DOCS } from './config.js'
 import type { SddAgent, Workflow } from './sdd.js'
 
 /**
- * How `mdrules` sets up a new project: with answers the user gave once (`mdrules setup`), or asking
+ * How `markode` sets up a new project: with answers the user gave once (`markode setup`), or asking
  * in each project. Global, per user; a project can still be set up by hand with `init --custom`.
  */
 export interface SetupDefaults {

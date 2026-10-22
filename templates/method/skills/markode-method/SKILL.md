@@ -1,9 +1,9 @@
 ---
-name: mdrules-method
-description: Where each kind of project knowledge goes in the mdrules method (vision, architecture, phases, tasks), when to create each doc, and templates for them. Use before creating, moving or growing a doc under docs/, or when a decision, a goal or a milestone needs writing down.
+name: markode-method
+description: Where each kind of project knowledge goes in the markode method (vision, architecture, phases, tasks), when to create each doc, and templates for them. Use before creating, moving or growing a doc under docs/, or when a decision, a goal or a milestone needs writing down.
 ---
 
-# The mdrules method
+# The markode method
 
 The docs are a **map and a memory**, not an encyclopedia. Write only what nobody can learn from the
 code: decisions and their reasons, conventions that aren't visible, and the state of the work. The main
@@ -17,10 +17,10 @@ doc (`CLAUDE.md` or `AGENTS.md`) is the map: it says where things are, never wha
 | Shared architecture | `docs/architecture/<topic>.md` | a technology or design decision affects the whole repository (or several projects) |
 | Architecture of one project (monorepo) | `<project>/docs/ARCHITECTURE.md` | a decision affects only that project |
 | Phases | `docs/phases/NN-name.md` | the user plans a milestone made of several tasks |
-| Tasks | `docs/tasks/<ID>-slug.md`, or `<project>/docs/tasks/` in a monorepo | the user asks for one (`/mdrules-new-task`) |
+| Tasks | `docs/tasks/<ID>-slug.md`, or `<project>/docs/tasks/` in a monorepo | the user asks for one (`/markode-new-task`) |
 
-A task's status lives only in its frontmatter: there is no index to keep in sync. `/mdrules-status` and
-the mdrules Dashboard list tasks by status.
+A task's status lives only in its frontmatter: there is no index to keep in sync. `/markode-status` and
+the markode Dashboard list tasks by status.
 
 To create one, copy its template from `templates/` next to this file (`vision.md`,
 `architecture-topic.md`, `project-architecture.md`, `phase.md`), replace the `<placeholders>` and set

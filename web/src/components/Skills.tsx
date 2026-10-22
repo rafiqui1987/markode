@@ -9,7 +9,7 @@ type GroupBy = 'tag' | 'source'
 
 const SOURCES: SkillSource[] = ['claude', 'agents', 'codex', 'gemini', 'copilot', 'cursor']
 const TARGETS: ProjectTarget[] = ['claude', 'agents']
-const GROUP_KEY = 'mdrules.skillsGroupBy'
+const GROUP_KEY = 'markode.skillsGroupBy'
 
 const sourceLabel = (s: SkillSource, t: T) => (s === 'agents' ? t('skills.shared') : { claude: 'Claude', codex: 'Codex', gemini: 'Gemini', copilot: 'Copilot', cursor: 'Cursor' }[s])
 

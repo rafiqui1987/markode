@@ -73,7 +73,7 @@ async function chooseMainDoc(root: string, d: SetupDefaults | null): Promise<str
 
 const WORKFLOW_OPTIONS: { value: Workflow; label: string; hint?: string }[] = [
   { value: 'none', label: 'None' },
-  { value: 'mdrules', label: 'mdrules method', hint: 'one file per task; vision, architecture and phases as they are needed; per project in monorepos' },
+  { value: 'markode', label: 'markode method', hint: 'one file per task; vision, architecture and phases as they are needed; per project in monorepos' },
   { value: 'openspec', label: 'OpenSpec', hint: 'specs + proposed changes, good for existing projects' },
   { value: 'speckit', label: 'GitHub Spec Kit', hint: 'constitution → spec → plan → tasks, per feature' },
 ]
@@ -88,9 +88,9 @@ const MONOREPO_OPTIONS: { value: SetupDefaults['monorepo']; label: string; hint:
   { value: 'single', label: 'One docs/ for everything', hint: 'at the root' },
 ]
 const SOURCE_LANG_QUESTION = 'Language you work in (every .md file is written in it)'
-const SOURCE_LANG_MARK = /<!-- mdrules:source-lang:\w+ -->/
+const SOURCE_LANG_MARK = /<!-- markode:source-lang:\w+ -->/
 const LANG_OPTIONS = LANGS.map((l) => ({ value: l, label: LANG_NAMES[l], hint: l === 'en' ? 'default' : undefined }))
-const HIDE_QUESTION = 'Hide the .mdrules/ folder in VS Code?'
+const HIDE_QUESTION = 'Hide the .markode/ folder in VS Code?'
 const ruleOptions = (rules: ReturnType<typeof listRules>) => rules.map((r) => ({ value: r.id, label: r.title, hint: r.body.split('\n')[0].replace(/^- /, '') }))
 /** Working rules: none by default (start from scratch), or picked from the user's library. */
 async function chooseRules(message: string, rules: ReturnType<typeof listRules>, initial: string[]): Promise<string[]> {
@@ -109,8 +109,8 @@ async function chooseRules(message: string, rules: ReturnType<typeof listRules>,
 }
 const agentOptions = () => (Object.keys(SDD_AGENTS) as SddAgent[]).map((a) => ({ value: a, label: SDD_AGENTS[a].label }))
 
-const WORKFLOW_LABEL: Record<Workflow, string> = { none: 'None', mdrules: 'mdrules', openspec: 'OpenSpec', speckit: 'GitHub Spec Kit' }
-const WORKFLOW_GUIDE: Record<Workflow, string> = { none: '', mdrules: '.claude/skills/mdrules-method/SKILL.md', openspec: 'openspec/README.md', speckit: 'specs/README.md' }
+const WORKFLOW_LABEL: Record<Workflow, string> = { none: 'None', markode: 'markode', openspec: 'OpenSpec', speckit: 'GitHub Spec Kit' }
+const WORKFLOW_GUIDE: Record<Workflow, string> = { none: '', markode: '.claude/skills/markode-method/SKILL.md', openspec: 'openspec/README.md', speckit: 'specs/README.md' }
 
 /** Questions about what can't be detected are asked even with saved defaults, when there is a terminal. */
 const canAsk = () => !!process.stdin.isTTY
@@ -240,13 +240,13 @@ async function chooseExisting(root: string, d: SetupDefaults | null): Promise<st
 async function chooseWorkflow(root: string, mainDoc: string, previous: Workflow | undefined, d: SetupDefaults | null): Promise<{ workflow: Workflow; section?: string }> {
   const detected = detectWorkflow(root)
   if (detected) {
-    p.log.info(`${WORKFLOW_LABEL[detected]} found: mdrules shows it in the dashboard.`)
+    p.log.info(`${WORKFLOW_LABEL[detected]} found: markode shows it in the dashboard.`)
     return { workflow: detected }
   }
   for (;;) {
     const choice = d ? d.workflow : check(await p.select<Workflow>({ message: 'Create a base structure for specs and planning?', options: WORKFLOW_OPTIONS, initialValue: previous ?? 'none' }))
     if (choice === 'none') return { workflow: choice }
-    if (choice === 'mdrules') {
+    if (choice === 'markode') {
       const existing = await chooseExisting(root, d)
       const areas = await chooseAreas(root, d)
       for (const a of areas) a.profile = await askProfile(root, a.dir, await chooseKind(root, a.dir), d)
@@ -260,7 +260,7 @@ async function chooseWorkflow(root: string, mainDoc: string, previous: Workflow 
       const layout: ProposalLayout = areas.length ? 'structured' : !big || d ? 'general' : check(await p.select<ProposalLayout>({ message: PROPOSALS_QUESTION, options: PROPOSAL_OPTIONS }))
       activateProposals(root, layout, mainDoc)
       if (created.length) p.log.success(`Created ${created.length} files: ${created.slice(0, 8).join(', ')}${created.length > 8 ? '…' : ''}`)
-      p.log.info(`Docs grow when there is something to write. Skills: /mdrules-status, /mdrules-new-task, /mdrules-close-session.`)
+      p.log.info(`Docs grow when there is something to write. Skills: /markode-status, /markode-new-task, /markode-close-session.`)
       return { workflow: choice, section: methodSection(areas, root, { profile, contracts, existing }) }
     }
 
@@ -300,15 +300,15 @@ async function chooseWorkflow(root: string, mainDoc: string, previous: Workflow 
     spin.stop(res.official ? `${WORKFLOW_LABEL[choice]} installed` : 'Structure created')
     if (official && !res.official) p.log.warn(`Couldn't run the ${WORKFLOW_LABEL[choice]} installer:\n${pc.dim(res.error ?? '')}\nCreated the structure only.`)
     if (!res.official) p.log.info(`To add the AI commands later, see ${pc.cyan(WORKFLOW_GUIDE[choice])}.`)
-    if (res.ignored.length) p.log.info(`Agent commands hidden in mdrules (${res.ignored.length} folders); the eye button in the sidebar shows them.`)
+    if (res.ignored.length) p.log.info(`Agent commands hidden in markode (${res.ignored.length} folders); the eye button in the sidebar shows them.`)
     return { workflow: choice }
   }
 }
 
 /** Set up the project: with the user's saved defaults `d`, or asking every question when null. */
 export async function runInit(root: string, d: SetupDefaults | null = null): Promise<ProjectConfig> {
-  p.intro(pc.bgCyan(pc.black(' mdrules ')))
-  if (d) p.log.info(`Using your defaults (${pc.cyan(defaultsFile())}). To choose differently for this project: ${pc.cyan('mdrules init --custom')}`)
+  p.intro(pc.bgCyan(pc.black(' markode ')))
+  if (d) p.log.info(`Using your defaults (${pc.cyan(defaultsFile())}). To choose differently for this project: ${pc.cyan('markode init --custom')}`)
   const previous = readConfig(root)
 
   const mainDoc = await chooseMainDoc(root, d)
@@ -325,7 +325,7 @@ export async function runInit(root: string, d: SetupDefaults | null = null): Pro
       : d.sourceLang
     : check(await p.select<Lang>({ message: SOURCE_LANG_QUESTION, options: LANG_OPTIONS, initialValue: sourceLangOf(mainText) }))
 
-  // Translations to review the docs in are added on purpose, with `mdrules translate`.
+  // Translations to review the docs in are added on purpose, with `markode translate`.
   const langs = (previous?.langs ?? []).filter((l) => l !== sourceLang)
 
   const rules = listRules()
@@ -357,13 +357,13 @@ export async function runInit(root: string, d: SetupDefaults | null = null): Pro
   ensureGitignore(root)
   if (!previous) {
     const hide = d ? d.hideInVsCode : check(await p.confirm({ message: HIDE_QUESTION, initialValue: true }))
-    if (hide && !hideInVsCode(root)) p.log.warn('.vscode/settings.json has comments; add "**/.mdrules": true to files.exclude by hand.')
+    if (hide && !hideInVsCode(root)) p.log.warn('.vscode/settings.json has comments; add "**/.markode": true to files.exclude by hand.')
   }
   installSkill(root)
 
   const config: ProjectConfig = { mainDoc, langs, langNames: previous?.langNames, workflow, proposals: readConfig(root)?.proposals, initializedAt: previous?.initializedAt ?? new Date().toISOString() }
   writeConfig(root, config)
-  p.outro(`Ready. Skill installed in ${pc.cyan('.claude/skills/mdrules')}. To review the docs in another language: ${pc.cyan('mdrules translate')}`)
+  p.outro(`Ready. Skill installed in ${pc.cyan('.claude/skills/markode')}. To review the docs in another language: ${pc.cyan('markode translate')}`)
   return config
 }
 
@@ -378,10 +378,10 @@ export async function runSetup(quick = false): Promise<SetupDefaults> {
     writeDefaults(d)
     return d
   }
-  p.intro(pc.bgCyan(pc.black(' mdrules setup ')))
+  p.intro(pc.bgCyan(pc.black(' markode setup ')))
   const mode = check(
     await p.select<SetupDefaults['mode']>({
-      message: 'How should mdrules set up your projects?',
+      message: 'How should markode set up your projects?',
       options: [
         { value: 'defaults', label: 'With my answers', hint: 'asked now, once; every project uses them' },
         { value: 'ask', label: 'Ask in each project' },
@@ -392,7 +392,7 @@ export async function runSetup(quick = false): Promise<SetupDefaults> {
   if (mode === 'ask') {
     const d = { ...previous, mode }
     writeDefaults(d)
-    p.outro(`Saved. Each project will ask its own questions. Change it with ${pc.cyan('mdrules setup')}`)
+    p.outro(`Saved. Each project will ask its own questions. Change it with ${pc.cyan('markode setup')}`)
     return d
   }
 
@@ -409,7 +409,7 @@ export async function runSetup(quick = false): Promise<SetupDefaults> {
   if (workflow === 'openspec')
     agents = check(await p.multiselect({ message: 'Install the OpenSpec commands for which agents?', options: agentOptions(), initialValues: previous.agents, required: false }))
   if (workflow === 'speckit') agents = [check(await p.select({ message: 'Install the Spec Kit commands for which agent?', options: agentOptions(), initialValue: previous.agents[0] }))]
-  if (workflow === 'mdrules') monorepo = check(await p.select<SetupDefaults['monorepo']>({ message: MONOREPO_QUESTION, options: MONOREPO_OPTIONS, initialValue: previous.monorepo }))
+  if (workflow === 'markode') monorepo = check(await p.select<SetupDefaults['monorepo']>({ message: MONOREPO_QUESTION, options: MONOREPO_OPTIONS, initialValue: previous.monorepo }))
   const sourceLang = check(await p.select<Lang>({ message: `${SOURCE_LANG_QUESTION}; projects that already declare one keep it`, options: LANG_OPTIONS, initialValue: previous.sourceLang }))
   const rules = listRules()
   const selected = await chooseRules('Working rules for your projects', rules, previous.rules.filter((id) => rules.some((r) => r.id === id)))
@@ -418,6 +418,6 @@ export async function runSetup(quick = false): Promise<SetupDefaults> {
 
   const d: SetupDefaults = { mode, mainDoc, workflow, agents, monorepo, sourceLang, rules: selected, rulesInSubprojects, hideInVsCode }
   writeDefaults(d)
-  p.outro(`Saved in ${pc.cyan(defaultsFile())}. Change them with ${pc.cyan('mdrules setup')}; for a single project: ${pc.cyan('mdrules init --custom')}`)
+  p.outro(`Saved in ${pc.cyan(defaultsFile())}. Change them with ${pc.cyan('markode setup')}; for a single project: ${pc.cyan('markode init --custom')}`)
   return d
 }

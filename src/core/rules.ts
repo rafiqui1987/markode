@@ -10,8 +10,8 @@ export interface Rule {
 }
 
 const rulesDir = () => path.join(GLOBAL_DIR, 'rules')
-const START = '<!-- mdrules:rules:start -->'
-const END = '<!-- mdrules:rules:end -->'
+const START = '<!-- markode:rules:start -->'
+const END = '<!-- markode:rules:end -->'
 
 export const slugify = (s: string) =>
   s
@@ -21,7 +21,7 @@ export const slugify = (s: string) =>
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '')
 
-/** Copy the bundled presets into ~/.mdrules/rules the first time. */
+/** Copy the bundled presets into ~/.markode/rules the first time. */
 export function seedRules() {
   if (fs.existsSync(rulesDir())) return
   fs.mkdirSync(rulesDir(), { recursive: true })
@@ -74,13 +74,13 @@ function extractSection(text: string): string | null {
 function writtenRules(docText: string): Record<string, Rule> {
   const section = extractSection(docText) ?? ''
   const out: Record<string, Rule> = {}
-  for (const m of section.matchAll(/<!-- rule:([\w-]+) -->\n([\s\S]*?)(?=\n+<!-- (?:rule:|mdrules:rules:end))/g)) out[m[1]] = { id: m[1], title: m[1], body: m[2].trim() }
+  for (const m of section.matchAll(/<!-- rule:([\w-]+) -->\n([\s\S]*?)(?=\n+<!-- (?:rule:|markode:rules:end))/g)) out[m[1]] = { id: m[1], title: m[1], body: m[2].trim() }
   return out
 }
 
 /** Source language declared in a main doc (shared with the team and the AI). */
 export function sourceLangOf(docText: string): Lang {
-  const m = /<!-- mdrules:source-lang:(\w+) -->/.exec(extractSection(docText) ?? '')
+  const m = /<!-- markode:source-lang:(\w+) -->/.exec(extractSection(docText) ?? '')
   return m && isLang(m[1]) ? m[1] : DEFAULT_SOURCE
 }
 
@@ -101,9 +101,9 @@ function renderSection(rules: Rule[], sourceLang: Lang): string {
     START,
     '## Working rules',
     '',
-    'This project uses mdrules: follow `.claude/skills/mdrules/SKILL.md` when editing any `.md` file.',
+    'This project uses markode: follow `.claude/skills/markode/SKILL.md` when editing any `.md` file.',
     '',
-    `<!-- mdrules:source-lang:${sourceLang} -->`,
+    `<!-- markode:source-lang:${sourceLang} -->`,
     `- Source language of every \`.md\` file: **${LANG_NAMES[sourceLang]}** (\`${sourceLang}\`).`,
     ...(body ? ['', body] : []),
     END,

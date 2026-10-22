@@ -4,8 +4,8 @@ import YAML from 'yaml'
 import { stateDir } from './config.js'
 
 /**
- * `mdrules wait <proposal>`: the agent runs it in the background after writing a proposal. It waits,
- * without using tokens, until the user answers in mdrules, then prints what the agent needs to go on.
+ * `markode wait <proposal>`: the agent runs it in the background after writing a proposal. It waits,
+ * without using tokens, until the user answers in markode, then prints what the agent needs to go on.
  * While it runs, a pid file tells the app that the agent is listening.
  */
 const waitsDir = (root: string) => path.join(stateDir(root), 'waits')
@@ -143,6 +143,6 @@ export function answerSummary(root: string, rel: string): string {
     ...section('Comments waiting for your reply', comments),
     ...section('Affects', affects),
     ...section('After the answer, you planned to', after),
-    'Next: follow the mdrules-proposals skill ("When the user answers").',
+    'Next: follow the markode-proposals skill ("When the user answers").',
   ].join('\n')
 }

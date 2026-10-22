@@ -7,10 +7,10 @@ import { flattenFiles, scanTree, setIgnored } from './scan.js'
 
 /**
  * Spec-driven development structures a project can use. OpenSpec and Spec Kit are installed with their own
- * CLIs (which also add the agent commands); without them, mdrules writes a compatible skeleton and a guide.
+ * CLIs (which also add the agent commands); without them, markode writes a compatible skeleton and a guide.
  */
 export type Workflow = NonNullable<ProjectConfig['workflow']>
-export const WORKFLOWS: Workflow[] = ['none', 'mdrules', 'openspec', 'speckit']
+export const WORKFLOWS: Workflow[] = ['none', 'markode', 'openspec', 'speckit']
 
 /** Agents both tools can install commands for, with each tool's id. */
 export const SDD_AGENTS = {
@@ -53,7 +53,7 @@ export interface InstallResult {
   /** Why the CLI didn't run or failed (last lines of its output). */
   error?: string
   created: string[]
-  /** Agent command folders hidden in mdrules (still on disk). */
+  /** Agent command folders hidden in markode (still on disk). */
   ignored: string[]
 }
 
@@ -86,7 +86,7 @@ const today = () => new Date().toISOString().slice(0, 10)
 // ------------------------------------------------------------ main doc block
 
 
-/** Fixed sections; the mdrules method builds its own (see core/method.ts). */
+/** Fixed sections; the markode method builds its own (see core/method.ts). */
 const WORKFLOW_TEXT: Record<'openspec' | 'speckit', string> = {
   openspec: [
     '## Workflow',
@@ -111,16 +111,16 @@ const WORKFLOW_TEXT: Record<'openspec' | 'speckit', string> = {
 
 /** Write (or remove, for 'none') the workflow section of the main doc; the rest of the doc is untouched. */
 export function applyWorkflowToFile(file: string, workflow: Workflow, text?: string) {
-  writeManagedBlock(file, workflow === 'none' ? null : (text ?? (workflow === 'mdrules' ? null : WORKFLOW_TEXT[workflow])))
+  writeManagedBlock(file, workflow === 'none' ? null : (text ?? (workflow === 'markode' ? null : WORKFLOW_TEXT[workflow])))
 }
 
 /**
- * Replace the `mdrules:<name>` block of a doc (`workflow` by default), add it (at the end, or right after the title with `top`),
+ * Replace the `markode:<name>` block of a doc (`workflow` by default), add it (at the end, or right after the title with `top`),
  * or remove it when `body` is null.
  */
 export function writeManagedBlock(file: string, body: string | null, top = false, name = 'workflow') {
-  const START = `<!-- mdrules:${name}:start -->`
-  const END = `<!-- mdrules:${name}:end -->`
+  const START = `<!-- markode:${name}:start -->`
+  const END = `<!-- markode:${name}:end -->`
   const text = fs.readFileSync(file, 'utf8')
   const s = text.indexOf(START)
   const e = text.indexOf(END)
