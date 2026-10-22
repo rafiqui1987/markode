@@ -2,10 +2,11 @@ import fs from 'node:fs'
 import path from 'node:path'
 import * as p from '@clack/prompts'
 import pc from 'picocolors'
-import { type Lang, LANG_NAMES, LANGS, MAIN_DOCS, type ProjectConfig, readConfig, writeConfig } from '../core/config.js'
+import { contentDoc, isPointer, type Lang, LANG_NAMES, LANGS, linkAgentsDoc, MAIN_DOCS, type ProjectConfig, readConfig, writeConfig } from '../core/config.js'
 import { BASE_DEFAULTS, defaultsFile, readDefaults, type SetupDefaults, writeDefaults } from '../core/defaults.js'
 import { appliedRuleIds, applyRulesToFile, listRules, sourceLangOf } from '../core/rules.js'
 import { type Area, detectAreas, installMethodSkills, methodSection, scaffoldMethod, suggestPrefix } from '../core/method.js'
+import { detectProfile, EXPERIMENTS_LABEL, type Experiments, existingDocs, findContracts, guessKind, KIND_HINT, KIND_LABEL, looksLikeMicroservices, type Profile, type ProjectKind } from '../core/profile.js'
 import { activateProposals, type ProposalLayout } from '../core/proposals.js'
 import { createMainDoc, ensureGitignore, hideInVsCode, installSkill } from '../core/scaffold.js'
 import { applyWorkflowToFile, detectWorkflow, hasUv, installWorkflow, SDD_AGENTS, type SddAgent, type Workflow } from '../core/sdd.js'
@@ -19,9 +20,18 @@ function check<T>(value: T): Exclude<T, symbol> {
   return value as Exclude<T, symbol>
 }
 
+/** Claude Code reads CLAUDE.md, not AGENTS.md: with only AGENTS.md, offer a CLAUDE.md that imports it. */
+async function offerClaudeLink(root: string, d: SetupDefaults | null) {
+  if (fs.existsSync(path.join(root, 'CLAUDE.md'))) return
+  const link = d ? d.mainDoc === 'CLAUDE.md' : check(await p.confirm({ message: 'Claude Code reads CLAUDE.md, not AGENTS.md. Add a CLAUDE.md that imports AGENTS.md?', initialValue: true }))
+  if (link && linkAgentsDoc(root)) p.log.success('Created CLAUDE.md (imports AGENTS.md)')
+}
+
 async function chooseMainDoc(root: string, d: SetupDefaults | null): Promise<string> {
-  const existing = MAIN_DOCS.filter((d) => fs.existsSync(path.join(root, d)))
+  // A CLAUDE.md that only imports AGENTS.md is not a main doc of its own.
+  const existing = MAIN_DOCS.filter((d) => fs.existsSync(path.join(root, d)) && !(d === 'CLAUDE.md' && isPointer(fs.readFileSync(path.join(root, d), 'utf8'))))
   if (d) {
+    if (existing.length === 1 && existing[0] === 'AGENTS.md') await offerClaudeLink(root, d)
     if (existing.length) return existing.includes(d.mainDoc) ? d.mainDoc : existing[0]
     createMainDoc(root, d.mainDoc)
     p.log.success(`Created ${d.mainDoc}`)
@@ -47,6 +57,7 @@ async function chooseMainDoc(root: string, d: SetupDefaults | null): Promise<str
       }),
     )
     createMainDoc(root, choice)
+    if (choice === 'AGENTS.md') await offerClaudeLink(root, d)
     return choice
   }
   const choice = check(
@@ -62,7 +73,7 @@ async function chooseMainDoc(root: string, d: SetupDefaults | null): Promise<str
 
 const WORKFLOW_OPTIONS: { value: Workflow; label: string; hint?: string }[] = [
   { value: 'none', label: 'None' },
-  { value: 'mdrules', label: 'mdrules method', hint: 'vision, architecture, phases and one file per task; per area in monorepos' },
+  { value: 'mdrules', label: 'mdrules method', hint: 'one file per task; vision, architecture and phases as they are needed; per project in monorepos' },
   { value: 'openspec', label: 'OpenSpec', hint: 'specs + proposed changes, good for existing projects' },
   { value: 'speckit', label: 'GitHub Spec Kit', hint: 'constitution → spec → plan → tasks, per feature' },
 ]
@@ -81,15 +92,42 @@ const SOURCE_LANG_MARK = /<!-- mdrules:source-lang:\w+ -->/
 const LANG_OPTIONS = LANGS.map((l) => ({ value: l, label: LANG_NAMES[l], hint: l === 'en' ? 'default' : undefined }))
 const HIDE_QUESTION = 'Hide the .mdrules/ folder in VS Code?'
 const ruleOptions = (rules: ReturnType<typeof listRules>) => rules.map((r) => ({ value: r.id, label: r.title, hint: r.body.split('\n')[0].replace(/^- /, '') }))
+/** Working rules: none by default (start from scratch), or picked from the user's library. */
+async function chooseRules(message: string, rules: ReturnType<typeof listRules>, initial: string[]): Promise<string[]> {
+  const pick = check(
+    await p.select({
+      message,
+      options: [
+        { value: 'none', label: 'None', hint: 'start from scratch; add your own later in the Rules tab' },
+        { value: 'pick', label: 'Choose rules', hint: 'common rules for AI agents, plus the ones you create' },
+      ],
+      initialValue: initial.length ? 'pick' : 'none',
+    }),
+  )
+  if (pick === 'none') return []
+  return check(await p.multiselect({ message: 'Which rules?', options: ruleOptions(rules), initialValues: initial, required: false }))
+}
 const agentOptions = () => (Object.keys(SDD_AGENTS) as SddAgent[]).map((a) => ({ value: a, label: SDD_AGENTS[a].label }))
 
 const WORKFLOW_LABEL: Record<Workflow, string> = { none: 'None', mdrules: 'mdrules', openspec: 'OpenSpec', speckit: 'GitHub Spec Kit' }
-const WORKFLOW_GUIDE: Record<Workflow, string> = { none: '', mdrules: 'docs/README.md', openspec: 'openspec/README.md', speckit: 'specs/README.md' }
+const WORKFLOW_GUIDE: Record<Workflow, string> = { none: '', mdrules: '.claude/skills/mdrules-method/SKILL.md', openspec: 'openspec/README.md', speckit: 'specs/README.md' }
 
-/** In a monorepo, which top-level folders get their own docs and tasks, and their task prefixes. */
+/** Questions about what can't be detected are asked even with saved defaults, when there is a terminal. */
+const canAsk = () => !!process.stdin.isTTY
+
+/** In a monorepo, which projects get their own docs and tasks, and their task prefixes. */
 async function chooseAreas(root: string, d: SetupDefaults | null): Promise<Area[]> {
-  const candidates = detectAreas(root)
+  const { dirs: candidates, unsure } = detectAreas(root)
   if (!candidates.length) return []
+  if (unsure && canAsk()) {
+    const separate = check(
+      await p.confirm({
+        message: `${candidates.map((c) => `${c}/`).join(', ')} each have their own manifest. Are they separate projects (e.g. a front end and a back end)?`,
+        initialValue: true,
+      }),
+    )
+    if (!separate) return []
+  }
   if (d) {
     const used = new Set<string>()
     return d.monorepo === 'single' ? [] : candidates.map((dir) => ({ dir, prefix: suggestPrefix(dir, used) }))
@@ -122,6 +160,82 @@ async function chooseAreas(root: string, d: SetupDefaults | null): Promise<Area[
   return areas
 }
 
+/** What kind of project `dir` is: detected, or asked when the files don't make it clear. */
+async function chooseKind(root: string, dir: string): Promise<ProjectKind> {
+  const guess = guessKind(path.join(root, dir))
+  if (!guess.unclear || !canAsk()) return guess.kind
+  const where = dir ? `${dir}/` : 'this project'
+  const seen = guess.signals.length ? `found: ${guess.signals.join(', ')}` : 'no code yet'
+  return check(
+    await p.select<ProjectKind>({
+      message: `What kind of project is ${where}? (${seen})`,
+      options: (Object.keys(KIND_LABEL) as ProjectKind[]).map((k) => ({ value: k, label: KIND_LABEL[k], hint: KIND_HINT[k] })),
+      initialValue: guess.kind,
+    }),
+  )
+}
+
+/** The answers a kind needs; with saved defaults, what the folder already shows. */
+async function askProfile(root: string, dir: string, kind: ProjectKind, d: SetupDefaults | null): Promise<Profile> {
+  const base = detectProfile(path.join(root, dir), kind)
+  if (d || kind === 'app') return base
+  const where = dir ? ` (${dir}/)` : ''
+  if (kind === 'library') return { kind, published: check(await p.confirm({ message: `Is the library${where} published (npm, PyPI…)?`, initialValue: base.published })) }
+  if (kind === 'mobile') {
+    const platforms = check(
+      await p.multiselect({
+        message: `Target platforms${where}`,
+        options: ['ios', 'android', 'web'].map((v) => ({ value: v, label: v === 'ios' ? 'iOS' : v === 'android' ? 'Android' : 'Web' })),
+        initialValues: base.platforms,
+        required: false,
+      }),
+    )
+    return { kind, platforms }
+  }
+  if (kind === 'data') {
+    const dataLocation = check(await p.text({ message: `Where does the data live${where}? (folder, bucket, database; empty if not decided)`, initialValue: base.dataLocation, defaultValue: '' }))
+    const experiments = check(
+      await p.select<Experiments>({
+        message: 'How are experiments tracked?',
+        options: (Object.keys(EXPERIMENTS_LABEL) as Experiments[]).map((v) => ({ value: v, label: EXPERIMENTS_LABEL[v].replace(/`/g, '') })),
+        initialValue: base.experiments,
+      }),
+    )
+    return { kind, dataLocation: dataLocation.trim(), experiments }
+  }
+  const environments = check(await p.text({ message: `Environments${where}`, initialValue: base.environments, defaultValue: base.environments }))
+  return { kind, environments: environments.trim() }
+}
+
+/** Where a repository of services keeps its contracts; null when it doesn't look like one. */
+async function chooseContracts(root: string, areas: Area[], d: SetupDefaults | null): Promise<string | null> {
+  if (!looksLikeMicroservices(root, areas.length)) return null
+  const found = findContracts(root)
+  if ((d && found) || !canAsk()) return found
+  const answer = check(
+    await p.text({
+      message: 'Several services: where do their contracts (APIs, events) live? (e.g. proto/, an OpenAPI file; empty if none)',
+      initialValue: found ?? '',
+      defaultValue: '',
+    }),
+  )
+  return answer.trim() || null
+}
+
+/** Docs the project already had: which ones are official (with saved defaults, all of them). */
+async function chooseExisting(root: string, d: SetupDefaults | null): Promise<string[]> {
+  const found = existingDocs(root)
+  if (!found.length || d) return found
+  return check(
+    await p.multiselect({
+      message: 'These docs already exist. Which are the official ones? (the agent updates them instead of creating new ones)',
+      options: found.map((f) => ({ value: f, label: f })),
+      initialValues: found,
+      required: false,
+    }),
+  )
+}
+
 /** Ask for the specs and planning structure and create it; an existing OpenSpec or Spec Kit setup is kept as is. */
 async function chooseWorkflow(root: string, mainDoc: string, previous: Workflow | undefined, d: SetupDefaults | null): Promise<{ workflow: Workflow; section?: string }> {
   const detected = detectWorkflow(root)
@@ -133,7 +247,11 @@ async function chooseWorkflow(root: string, mainDoc: string, previous: Workflow 
     const choice = d ? d.workflow : check(await p.select<Workflow>({ message: 'Create a base structure for specs and planning?', options: WORKFLOW_OPTIONS, initialValue: previous ?? 'none' }))
     if (choice === 'none') return { workflow: choice }
     if (choice === 'mdrules') {
+      const existing = await chooseExisting(root, d)
       const areas = await chooseAreas(root, d)
+      for (const a of areas) a.profile = await askProfile(root, a.dir, await chooseKind(root, a.dir), d)
+      const contracts = await chooseContracts(root, areas, d)
+      const profile = areas.length ? undefined : await askProfile(root, '', await chooseKind(root, ''), d)
       const created = scaffoldMethod(root, mainDoc, areas)
       installMethodSkills(root)
       // Proposals come with the method: per project and topic in a monorepo; a big single project may
@@ -142,8 +260,8 @@ async function chooseWorkflow(root: string, mainDoc: string, previous: Workflow 
       const layout: ProposalLayout = areas.length ? 'structured' : !big || d ? 'general' : check(await p.select<ProposalLayout>({ message: PROPOSALS_QUESTION, options: PROPOSAL_OPTIONS }))
       activateProposals(root, layout, mainDoc)
       if (created.length) p.log.success(`Created ${created.length} files: ${created.slice(0, 8).join(', ')}${created.length > 8 ? '…' : ''}`)
-      p.log.info(`How it works: ${pc.cyan('docs/README.md')}. Skills: /mdrules-new-task, /mdrules-close-session.`)
-      return { workflow: choice, section: methodSection(areas, root) }
+      p.log.info(`Docs grow when there is something to write. Skills: /mdrules-status, /mdrules-new-task, /mdrules-close-session.`)
+      return { workflow: choice, section: methodSection(areas, root, { profile, contracts, existing }) }
     }
 
     let official = true
@@ -215,7 +333,7 @@ export async function runInit(root: string, d: SetupDefaults | null = null): Pro
   // Defaults add rules; they never remove the ones the project already has.
   const selected = d
     ? [...new Set([...applied, ...d.rules.filter((id) => rules.some((r) => r.id === id))])]
-    : check(await p.multiselect({ message: 'Which working rules apply to this project?', options: ruleOptions(rules), initialValues: applied, required: false }))
+    : await chooseRules('Working rules for this project', rules, applied)
   applyRulesToFile(mainFile, selected, sourceLang)
 
   const subprojects = findSubprojects(scanTree(root))
@@ -232,8 +350,7 @@ export async function runInit(root: string, d: SetupDefaults | null = null): Pro
       }),
     )
     for (const dir of targets) {
-      const doc = MAIN_DOCS.find((d) => fs.existsSync(path.join(root, dir, d)))!
-      applyRulesToFile(path.join(root, dir, doc), selected, sourceLang)
+      applyRulesToFile(contentDoc(path.join(root, dir))!, selected, sourceLang)
     }
   }
 
@@ -295,7 +412,7 @@ export async function runSetup(quick = false): Promise<SetupDefaults> {
   if (workflow === 'mdrules') monorepo = check(await p.select<SetupDefaults['monorepo']>({ message: MONOREPO_QUESTION, options: MONOREPO_OPTIONS, initialValue: previous.monorepo }))
   const sourceLang = check(await p.select<Lang>({ message: `${SOURCE_LANG_QUESTION}; projects that already declare one keep it`, options: LANG_OPTIONS, initialValue: previous.sourceLang }))
   const rules = listRules()
-  const selected = check(await p.multiselect({ message: 'Working rules to apply', options: ruleOptions(rules), initialValues: previous.rules.filter((id) => rules.some((r) => r.id === id)), required: false }))
+  const selected = await chooseRules('Working rules for your projects', rules, previous.rules.filter((id) => rules.some((r) => r.id === id)))
   const rulesInSubprojects = selected.length ? check(await p.confirm({ message: 'In monorepos, apply the rules to the subprojects too?', initialValue: previous.rulesInSubprojects })) : false
   const hideInVsCode = check(await p.confirm({ message: HIDE_QUESTION, initialValue: previous.hideInVsCode }))
 

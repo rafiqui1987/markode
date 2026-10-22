@@ -32,6 +32,8 @@ const asText = (v: unknown): string | null => (v instanceof Date ? v.toISOString
 
 export function summarize(root: string): DocSummary[] {
   return flattenFiles(scanTree(root)).flatMap((f) => {
+    // Agent config (`.claude/skills`, `.github/prompts`…) holds skills and templates, not project docs.
+    if (f.path.split('/').some((part) => part.startsWith('.'))) return []
     const text = fs.readFileSync(path.join(root, f.path), 'utf8')
     const meta = parseFrontmatter(text)
     // The task template (`_TEMPLATE.md`) is not a task.

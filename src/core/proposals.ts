@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
-import { MAIN_DOCS, readConfig, TEMPLATES_DIR, writeConfig } from './config.js'
+import { mainDocOf, readConfig, TEMPLATES_DIR, writeConfig } from './config.js'
 import { fill } from './scaffold.js'
 import { writeManagedBlock } from './sdd.js'
 
@@ -39,7 +39,7 @@ function section(layout: ProposalLayout) {
 
 /** The project's main docs: the root one and those of its areas or subprojects. */
 function mainDocs(root: string, mainDoc: string | null): string[] {
-  const doc = mainDoc ?? MAIN_DOCS.find((d) => fs.existsSync(path.join(root, d)))
+  const doc = mainDoc ?? mainDocOf(root)
   return doc ? [path.join(root, doc)] : []
 }
 

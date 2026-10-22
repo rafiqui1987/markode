@@ -19,11 +19,18 @@ so humans can edit comfortably while the AI keeps reading plain Markdown.
 
 | Situation | Behavior |
 |---|---|
-| `AGENTS.md` or `CLAUDE.md` exists | Ask: "Use this as the main document?" |
+| `AGENTS.md` or `CLAUDE.md` exists | Ask: "Use this as the main document?" (with saved defaults: use it) |
+| Only `AGENTS.md`, Claude Code used | Add a one-line `CLAUDE.md` that imports it (`@AGENTS.md`) |
 | Both exist | Ask which one is the main one |
-| Neither exists | Offer to create it + base structure in `/docs` |
-| Monorepo | Detect subprojects and repeat per project |
-| Always | Ask which **rule presets** to apply (see §3) |
+| Neither exists | Offer to create it |
+| Monorepo, front + back, folder of repos | Detect the projects; each gets its own main doc and `docs/tasks/` |
+| Project kind (app, library, mobile, data/ML, infrastructure, microservices) | Detected from files; asked when unclear; only that kind's questions |
+| Existing docs | Ask which are official; the main doc points the agent to them |
+| Always | Ask which **rule presets** to apply, none by default (see §3) |
+
+With the mdrules method, the setup creates only the task folder; vision, architecture and phases are
+created by the agent from the `mdrules-method` skill templates when there is something to write. A
+task's status lives only in its frontmatter (no task index).
 
 Init also installs the skill in `.claude/skills/mdrules/` so the AI writes using the conventions.
 
@@ -39,24 +46,33 @@ Reusable rules describing *how I work*, selectable on every init.
 ```md
 <!-- mdrules:rules:start -->
 ## Working rules
-- Prompts and answers in Spanish; code and .md files in English.
-- Never use npm; always use pnpm.
+- Never commit, push or open pull requests without asking first.
+- Change only what the task needs: don't refactor, rename or reformat unrelated code.
 <!-- mdrules:rules:end -->
 ```
 
-Example presets:
+The setup offers no rules by default (start from scratch). The library starts with common rules for AI
+agents; each user edits it and adds their own in the Rules tab:
 
 | id | rule |
 |---|---|
-| lang-es-code-en | Prompts and answers in Spanish; code and .md in English |
-| pnpm-only | Never use npm; always use pnpm |
+| ask-before-commit | Never commit, push or open pull requests without asking first |
+| verify-before-done | Run tests, linter and type checker before saying a task is done |
+| minimal-changes | Change only what the task needs |
+| match-conventions | Match the surrounding code's style, naming and libraries |
+| ask-new-dependencies | Don't add, remove or upgrade dependencies without asking |
+| protect-secrets | Never read, print or commit secrets or `.env` files |
+| ask-when-unclear | Ask instead of guessing; state assumptions |
+| tests-with-changes | Add or update tests with every behavior change |
+| update-docs | Update the docs that describe changed behavior |
 
 ## 4. Language
 
 - Every project has a **source language** (default English): every `.md` file is written in it.
   It is declared in the main doc's managed section (`<!-- mdrules:source-lang:xx -->`), so the team and the AI share it.
 - Each user enables any number of **translation languages**: English, Spanish, French, Portuguese, German, Italian.
-- The language selector switches between the original and each translation; **everything** mdrules shows follows it: UI, sidebar, documents. Translations can be **edited**.
+- The language selector switches between the original and each translation: sidebar and documents follow it. Translations can be **edited**.
+- The **interface language** is a separate, personal setting (Settings → General), English by default.
 - The source file is never overwritten by the app directly from a translation.
 - Translation is done by the **AI through the skill** (no API key in the app).
 - Files whose prose is not in the source language are flagged (badge + banner). `/mdrules sync` asks whether to convert them; "no" is remembered (`mdrules sync --keep`).

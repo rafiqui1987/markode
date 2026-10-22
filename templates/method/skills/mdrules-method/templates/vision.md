@@ -1,13 +1,13 @@
 ---
 type: vision
-updated: {{date}}
+updated: YYYY-MM-DD
 ---
 
 # Vision
 
 ## What
 
-<!-- One paragraph: what {{name}} is. -->
+<!-- One paragraph: what the project is. -->
 
 ## For whom
 

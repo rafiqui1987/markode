@@ -14,6 +14,31 @@ export const isLangCode = (v: unknown): v is string => typeof v === 'string' && 
 export const langName = (code: string, config?: ProjectConfig | null) => (isLang(code) ? LANG_NAMES[code] : (config?.langNames?.[code] ?? code))
 export const MAIN_DOCS = ['CLAUDE.md', 'AGENTS.md'] as const
 
+/** A Claude Code main doc that only imports AGENTS.md (Claude Code reads CLAUDE.md, not AGENTS.md). */
+const POINTER = '@AGENTS.md\n'
+export const isPointer = (text: string) => text.trim() === POINTER.trim()
+
+/** The main doc that holds a folder's content: AGENTS.md when CLAUDE.md only imports it. */
+export function contentDoc(dir: string): string | null {
+  const claude = path.join(dir, 'CLAUDE.md')
+  const agents = path.join(dir, 'AGENTS.md')
+  if (fs.existsSync(claude) && !(fs.existsSync(agents) && isPointer(fs.readFileSync(claude, 'utf8')))) return claude
+  return fs.existsSync(agents) ? agents : null
+}
+
+/** The name of a project's main doc, from the files that exist (null when there is none). */
+export function mainDocOf(root: string): string | null {
+  const doc = contentDoc(root)
+  return doc && path.basename(doc)
+}
+
+/** In a folder with only AGENTS.md, add a CLAUDE.md that imports it, so Claude Code loads it too. */
+export function linkAgentsDoc(dir: string): boolean {
+  if (fs.existsSync(path.join(dir, 'CLAUDE.md')) || !fs.existsSync(path.join(dir, 'AGENTS.md'))) return false
+  fs.writeFileSync(path.join(dir, 'CLAUDE.md'), POINTER)
+  return true
+}
+
 /** Personal, git-ignored settings of this project (the source language lives in the main doc). */
 export interface ProjectConfig {
   mainDoc: string | null

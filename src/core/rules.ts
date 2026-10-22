@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import YAML from 'yaml'
-import { DEFAULT_SOURCE, GLOBAL_DIR, isLang, type Lang, LANG_NAMES, MAIN_DOCS, TEMPLATES_DIR } from './config.js'
+import { DEFAULT_SOURCE, GLOBAL_DIR, isLang, type Lang, LANG_NAMES, mainDocOf, TEMPLATES_DIR } from './config.js'
 
 export interface Rule {
   id: string
@@ -86,7 +86,7 @@ export function sourceLangOf(docText: string): Lang {
 
 /** Source language of a project: read from its main doc. */
 export function projectSourceLang(root: string, mainDoc?: string | null): Lang {
-  const doc = mainDoc ?? MAIN_DOCS.find((d) => fs.existsSync(path.join(root, d)))
+  const doc = mainDoc ?? mainDocOf(root)
   if (!doc) return DEFAULT_SOURCE
   try {
     return sourceLangOf(fs.readFileSync(path.join(root, doc), 'utf8'))

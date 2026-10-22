@@ -11,9 +11,11 @@ Run `mdrules` in any repository and it opens all its `.md` files (`README.md`, `
 render as you type, and change in place. Files are saved exactly as written, never reformatted, so Git
 diffs stay clean and AI agents keep reading plain Markdown.
 
+**Why it exists:** [write less, point better](#the-mdrules-philosophy).
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/screenshot-dark.png">
-  <img alt="mdrules editor: file tree of a project using the mdrules method, a phase with its tasks, a comment thread like in Word and a Mermaid diagram" src="docs/assets/screenshot-light.png">
+  <img alt="mdrules editor: a repository with a front end and a back end, each with its own tasks; a phase listing tasks from both, a comment thread like in Word and a Mermaid diagram" src="docs/assets/screenshot-light.png">
 </picture>
 
 ## Quick start
@@ -33,6 +35,42 @@ The very first time, mdrules asks how you want your projects set up:
 
 Change your choice any time with `mdrules setup`. Then the editor opens at `http://localhost:4319`;
 it only listens on `127.0.0.1`.
+
+## The mdrules philosophy
+
+**Write less, point better.**
+
+Most `CLAUDE.md` files grow into hundreds of lines: generic advice the agent already follows, folder
+listings it can read by itself, the same decision copied in three places. It costs tokens, the agent
+still searches the whole repository, and nobody keeps it up to date. mdrules turns the docs into a
+**map** and a **memory**:
+
+- **No filler.** Write only what the code can't tell: decisions and why, hidden conventions, the state
+  of the work. A doc is created when there is something real to put in it.
+- **A map, not an encyclopedia.** The main doc says where things are, not what they say. Each fact
+  lives in one place; everything else links to it.
+- **Memory between sessions.** The work lives in task files with a status and a next step, not in a
+  chat history. Tomorrow, a new session (or a teammate) picks up where you stopped.
+- **Shaped like your repository.** A single app, a monorepo or a folder of repositories each get the
+  structure they need, and the setup asks only what matters for yours.
+
+```tree
+CLAUDE.md                     # the map: projects, where their docs live, how to start a session
+docs/                         # vision, shared decisions, phases, work across projects
+service/
+  CLAUDE.md                   # what this project is and its commands, nothing more
+  docs/tasks/SVC-007-....md   # in-progress · next step: retry payments on timeout
+front/
+  docs/tasks/FRO-012-....md   # blocked · waits on SVC-007
+```
+
+Yesterday you worked in `service/` and `front/`. Today you ask the agent *"what's pending?"*
+(`/mdrules-status`). It reads the map, scans only the task files of each project, and answers:
+SVC-007 is in progress and its next step is the retry; FRO-012 is blocked on it; phase 2 has four
+pending tasks; and one change in `front/` isn't covered by any task. No digging through the code, no
+explaining it all again.
+
+mdrules can't force an agent to follow the map, but it makes the right path the shortest one.
 
 ## What it does
 
@@ -95,12 +133,10 @@ agent always know what is being built, how, and what comes next:
 ```tree
 CLAUDE.md                  # short: map, commands, how to start and close a session
 docs/
-  README.md                # how the method works
-  vision.md                # what the project is, for whom, what is out of scope
-  architecture/            # technology and design decisions, one file per topic
-  phases/01-foundations.md # a construction phase: goal, its tasks, definition of done
-  TASKS.md                 # index: in progress, blocked, pending, done
-  tasks/T-001-....md       # one file per task: goal, acceptance checklist, next step, log
+  tasks/T-001-....md       # one file per task: status, goal, acceptance checklist, next step, log
+  vision.md                # when you define what the project is, for whom, what is out of scope
+  architecture/<topic>.md  # with the first decision on that topic
+  phases/02-checkout.md    # when you plan a milestone: goal, its tasks, definition of done
 ```
 
 ```mermaid
@@ -110,18 +146,39 @@ flowchart LR
   C -->|phase done| P
 ```
 
+- **It starts small**: the setup creates only the task folder and its template. The agent creates the
+  vision, architecture and phase docs from templates (skill `mdrules-method`) when there is something
+  to write. A task's status lives only in its file: there is no index to keep in sync.
+- **It knows what kind of project it is**, and asks only what that kind needs. When the files don't
+  make it clear, it asks:
+
+  | Kind | Detected by | Asks | Its docs |
+  |---|---|---|---|
+  | App | framework, `bin`, `Dockerfile`, `main.go`… | nothing | vision, architecture, phases |
+  | Library | `main`/`exports` in a public package, Cargo `[lib]` | is it published? | public API and versioning, changelog |
+  | Mobile | React Native, Flutter, `android/` + `ios/` | target platforms | releases and stores |
+  | Data / ML | notebooks, `dvc.yaml`, `MLproject` | where the data lives, how experiments are tracked | datasets, experiment log |
+  | Infrastructure | Terraform, Pulumi, Helm, Kustomize | environments | runbooks |
+  | Microservices | several services + proto/OpenAPI or compose | where the contracts live | contracts as shared architecture |
+
+  It also recognizes monorepos with workspaces, a front end and a back end without workspaces, and
+  folders of repositories; and if the project already has docs, it asks which are the official ones
+  and points the agent to them instead of creating new ones.
 - **The main doc stays short** and points to `docs/`. If `CLAUDE.md` or `AGENTS.md` already exist,
   they are not rewritten: mdrules adds a "Workflow" section with the map and the session routine.
 - **Each fact lives in one place**: decisions in `architecture/`, progress in the task files.
 - **Sessions pick up where they stopped**: the agent looks for tasks `in-progress`, reads their "Next
-  step" and tells you where you left off. `/mdrules-new-task` creates a task in the right place, and
+  step" and tells you where you left off. `/mdrules-status` sums up what is in progress, blocked and
+  pending, per project; `/mdrules-new-task` creates a task in the right place; and
   `/mdrules-close-session` logs what was done, the next step and the status.
 - **Monorepos**: each project (`apps/web`, `services/api`… or each repository in a folder of repos)
-  gets its own short `CLAUDE.md`/`AGENTS.md`, `docs/ARCHITECTURE.md`, proposals and tasks with its own
-  prefix (`WEB-001`, `API-001`). The root main doc is the overview: a table of the projects, what each
-  one is and where its docs live. The root `docs/` holds vision, phases and work across projects
-  (`CORE-001`). The agent reads only the project it is working on. A project's existing
-  `CLAUDE.md`/`AGENTS.md` is kept as is: mdrules only adds a short block pointing to its docs.
+  gets its own short `CLAUDE.md`/`AGENTS.md`, tasks with its own prefix (`WEB-001`, `API-001`),
+  proposals and, with its first decision, a `docs/ARCHITECTURE.md`. The root main doc is the
+  overview: a table of the projects, what each one is and where its docs live. The root `docs/` holds
+  vision, phases and work across projects (`CORE-001`). The agent reads only the project it is
+  working on. A project's existing `CLAUDE.md`/`AGENTS.md` is kept as is: mdrules only adds a short
+  block pointing to its docs. Where there is only `AGENTS.md` and you use Claude Code, it adds a
+  one-line `CLAUDE.md` that imports it (`@AGENTS.md`), since Claude Code reads `CLAUDE.md`.
 - **The Dashboard** shows each phase with its progress and tasks, and a board of what is in progress,
   blocked and pending.
 
@@ -188,7 +245,10 @@ skill.
 ### 9. Also included
 
 - **Changes**: Git diff of your Markdown, grouped by folder and section.
-- **Rules**: reusable rule presets (e.g. "ask before committing") written into `CLAUDE.md` or `AGENTS.md`.
+- **Rules**: your library of reusable rules, written into `CLAUDE.md` or `AGENTS.md` where you apply
+  them. It starts with common ones for AI agents (ask before committing, verify before saying it's done,
+  minimal changes, protect secrets…); edit them and add your own. The setup applies none unless you
+  choose them. The library lives in `~/.mdrules/rules/`.
 - **Settings**, by section: General (interface language, theme), Editor (font, size, line spacing,
   margins, line width, wrapping), Document languages and Proposals.
 
