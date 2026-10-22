@@ -64,7 +64,8 @@ async function main() {
     await runInit(root, flag('--custom') ? null : await defaults())
     return
   }
-  if (command === 'start' && !readConfig(root)) {
+  // Other settings (e.g. `link --skip`) can be saved before the setup ran: only `init` sets initializedAt.
+  if (command === 'start' && !readConfig(root)?.initializedAt) {
     if (process.stdin.isTTY) await runInit(root, flag('--custom') ? null : await defaults())
     // Saved defaults need no answers, so they also apply without a terminal.
     else if (readDefaults()?.mode === 'defaults') await runInit(root, readDefaults())
@@ -103,7 +104,7 @@ function check() {
 function link() {
   const config = readConfig(root)
   if (flag('--skip')) {
-    if (config) writeConfig(root, { ...config, skipLink: true })
+    writeConfig(root, { ...(config ?? { mainDoc: null, langs: [] }), skipLink: true })
     return console.log('markode won\'t offer to link CLAUDE.md and AGENTS.md in this project again.')
   }
   // A dry run is how the agent checks at the start of a session: say nothing once the user declined.

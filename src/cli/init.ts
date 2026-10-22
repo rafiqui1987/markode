@@ -355,13 +355,13 @@ export async function runInit(root: string, d: SetupDefaults | null = null): Pro
   }
 
   ensureGitignore(root)
-  if (!previous) {
+  if (!previous?.initializedAt) {
     const hide = d ? d.hideInVsCode : check(await p.confirm({ message: HIDE_QUESTION, initialValue: true }))
     if (hide && !hideInVsCode(root)) p.log.warn('.vscode/settings.json has comments; add "**/.markode": true to files.exclude by hand.')
   }
   installSkill(root)
 
-  const config: ProjectConfig = { mainDoc, langs, langNames: previous?.langNames, workflow, proposals: readConfig(root)?.proposals, initializedAt: previous?.initializedAt ?? new Date().toISOString() }
+  const config: ProjectConfig = { mainDoc, langs, langNames: previous?.langNames, workflow, proposals: readConfig(root)?.proposals, skipLink: previous?.skipLink, initializedAt: previous?.initializedAt ?? new Date().toISOString() }
   writeConfig(root, config)
   p.outro(`Ready. Skill installed in ${pc.cyan('.claude/skills/markode')}. To review the docs in another language: ${pc.cyan('markode translate')}`)
   return config
