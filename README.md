@@ -110,20 +110,23 @@ Undo, redo and **discard** (back to how the file was when you opened it) sit nex
 Most AI agents, and most teams, work best with docs in English. If English isn't easy for you, you
 don't have to choose:
 
-- Run `mdrules translate` and pick a language to review the docs in: Spanish, French, Portuguese,
-  German or Italian, or **type any other** (Japanese, Dutch…). mdrules then shows **every doc in that
-  language**.
-- The menus are in English by default and don't depend on the docs' language: pick English, Spanish,
-  French, Portuguese, German or Italian in **Settings → General**.
-  Read the architecture, tick tasks, write notes and fix a rule, all in your language.
+- Add a language to review the docs in, from **Settings → Document languages** or with
+  `mdrules translate`: Spanish, French, Portuguese, German or Italian, or **type any other** (Japanese,
+  Dutch…). Then ask your agent for **`/mdrules translate`** (mdrules has a button to copy it), and
+  mdrules shows **every doc in that language**. Read the architecture, tick tasks, write notes and fix
+  a rule, all in your language.
 - The files in the repository **stay in one source language** (English by default), so the agent and
   the rest of the team keep reading one consistent version.
-- Your edits are kept as a translation until you ask the agent for `/mdrules sync`: it applies them
-  to the source file and refreshes every translation. The sidebar marks which docs are pending.
+- Your edits are kept as a translation until you ask for `/mdrules translate` again. Before changing
+  a source file, the agent lists what would change and applies only what you approve. The top bar
+  shows how many docs are behind, and copies the command when clicked.
+- Translating is always on purpose: it never happens as a side effect of other work.
+- The menus are in English by default and don't depend on the docs' language: pick English, Spanish,
+  French, Portuguese, German or Italian in **Settings → General**.
 
 Example: you open `docs/tasks/T-004-login.md` in Spanish, add an acceptance criterion and tick two
-others. After `/mdrules sync`, the English file has the new criterion and the ticks, and the agent
-works from it.
+others. After `/mdrules translate` and your OK, the English file has the new criterion and the ticks,
+and the agent works from it.
 
 ### 6. A method to plan and follow the work
 
@@ -283,7 +286,14 @@ To keep it installed: `npm install -g mdrules` (or `pnpm add -g mdrules`).
 ## For AI agents
 
 `mdrules init` installs `.claude/skills/mdrules/SKILL.md`, which tells the agent how to write Markdown
-that mdrules presents well and how to keep translations in sync. It also writes into the main doc:
+that mdrules presents well, and gives it two commands:
+
+| Command | What the agent does | When |
+|---|---|---|
+| `/mdrules sync` | Keeps the docs consistent: applies answered proposals, ticks phases from their tasks, checks the projects table and broken links (`mdrules check`) | Start and end of a session, after editing docs |
+| `/mdrules translate` | Translates what is behind; asks before changing any source file | Only when you ask |
+
+It also writes into the main doc:
 
 - the working rules you picked, between `<!-- mdrules:rules:start -->` and `<!-- mdrules:rules:end -->`;
 - how the project plans its work (the mdrules method, OpenSpec or Spec Kit), between
@@ -292,10 +302,17 @@ that mdrules presents well and how to keep translations in sync. It also writes 
 - with proposals on, how the agent writes proposals and answers comments (skill
   `mdrules-proposals`), between `<!-- mdrules:proposals:start -->` and `<!-- mdrules:proposals:end -->`.
 
+When the agent writes a proposal, it runs `mdrules wait <proposal>` in the background: it waits
+without using tokens until you press "Done, send my answer" in mdrules, then hands the agent your
+choices, open questions and comments, and the agent continues by itself. If no session was open, the
+next one applies the answer first.
+
 ```bash
-mdrules sync --status [--json]                   # translations + files not in the source language
-mdrules sync --mark [--lang xx] <path...>|--all  # record translations as in sync
-mdrules sync --keep <path...>                    # keep files in their current language
+mdrules check [--json]                                # what /mdrules sync fixes
+mdrules wait <proposal.md>                            # wait for the user's answer, then print it
+mdrules translate --status [--json]                   # translations + files not in the source language
+mdrules translate --mark [--lang xx] <path...>|--all  # record translations as in sync
+mdrules translate --keep <path...>                    # keep files in their current language
 ```
 
 ## Uninstall

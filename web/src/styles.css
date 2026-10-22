@@ -483,6 +483,16 @@ body.resizing { cursor: col-resize; user-select: none; }
 .chip { border: 1px solid var(--border); background: none; border-radius: 999px; padding: 3px 12px; cursor: pointer; font-size: 13px; color: var(--muted); }
 .chip.on { border-color: var(--accent); color: var(--text); background: var(--selection); }
 .btn.small { padding: 2px 8px; font-size: 11px; text-transform: none; letter-spacing: 0; font-weight: 500; }
+.set-callout { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--sync); border-radius: 8px; background: color-mix(in srgb, var(--sync) 8%, var(--panel)); font-size: 13px; }
+.copy-command { display: inline-flex; align-items: center; gap: 6px; }
+.copy-command code { padding: 1px 6px; border-radius: 4px; background: var(--panel-2); color: var(--text); }
+.add-lang { display: inline-flex; align-items: center; gap: 6px; }
+.add-lang input.control { width: 140px; background: var(--panel-2); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 3px 8px; font: inherit; font-size: 13px; outline: none; }
+.add-lang input.control.code { width: 70px; font-family: var(--font-mono); }
+.add-lang input.control:focus { border-color: var(--accent); }
+.add-lang-select { border-style: dashed; color: var(--muted); }
+button.pill { display: inline-flex; align-items: center; gap: 5px; border: 0; cursor: pointer; }
+button.pill:hover { filter: brightness(1.15); }
 .badge.foreign { color: var(--sync); border: 1px solid currentColor; font-size: 9px; line-height: 12px; }
 .banner.foreign { color: var(--sync); }
 .banner .btn { margin-left: auto; padding: 2px 10px; font-size: 12px; }

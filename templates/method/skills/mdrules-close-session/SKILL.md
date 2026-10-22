@@ -16,4 +16,5 @@ description: Closes a work session in a project that follows the mdrules method,
 4. If an architecture decision was made or changed, update it in its one place (the project's
    `docs/ARCHITECTURE.md` or the root `docs/architecture/`; create it from the `mdrules-method`
    templates if it doesn't exist yet), never in the main doc.
-5. Summarize for the user in three lines: what was done, the next step, and anything open.
+5. Run `/mdrules sync` (the docs check of the `mdrules` skill) and fix what it reports.
+6. Summarize for the user in three lines: what was done, the next step, and anything open.

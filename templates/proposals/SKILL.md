@@ -12,9 +12,20 @@ A proposal is a **temporary** file for one decision. Write one instead of a chat
 
 For a short answer or a single obvious option, just answer in the chat.
 
-Write the file, tell the user its path in one line, and wait. They open it in mdrules, tick options and
-add comments, then tell you it is answered. Once applied, the decision lives in the docs it affects and
-the proposal is deleted.
+After writing the file:
+
+1. If a task waits on this decision, set it to `status: blocked` with "Next step: waiting on proposal
+   <path>".
+2. Start `mdrules wait <path>` **in the background** (in Claude Code, a background Bash command: you are
+   notified when it exits). It waits, without using tokens, until the user presses "Done, send my
+   answer" in mdrules, then prints their answer: choices, open questions, comments waiting for a reply,
+   affected docs and your "After your answer" list. If you can't run background commands, skip it: the
+   user will tell you, or the next `/mdrules sync` finds the answered proposal.
+3. Tell the user the path in one line and that you will continue when they answer. Meanwhile, keep
+   working on anything that doesn't depend on the decision.
+
+When the watcher's output arrives, go straight to "When the user answers". Once applied, the decision
+lives in the docs it affects and the proposal is deleted.
 
 ## Where
 
@@ -61,6 +72,10 @@ flowchart LR
 
 - [ ] <optional extra the user can tick>
 
+## After your answer
+
+- <what you will do with each possible choice, so any session can continue from here>
+
 ## Open questions
 
 1. <question>
@@ -103,12 +118,14 @@ comment's text.
 ## When the user answers
 
 1. Read the ticked options, the open questions and every comment without a reply from you.
-2. If something is unclear or a comment raises a new question, reply to that comment, keep
-   `status: open`, and tell the user what you need. Don't apply anything yet.
+2. If something is unclear or a comment raises a new question, reply to that comment, set
+   `status: open` again, tell the user what you need, and start `mdrules wait` again. Don't apply
+   anything yet.
 3. Otherwise apply the decision to every doc that depends on it: the ones in `affects` and any other
    you find (a task's goal or acceptance criteria, a phase's task list, an architecture table, the
    vision…). Record it in its one place: in the mdrules method, the architecture file for design
    decisions, and a line in the log of the task it belongs to (`<date>: decided <what> (proposal
    <name>)`).
-4. Delete the proposal file: it was temporary, the decision now lives in those docs.
-5. Tell the user in a few lines what you changed and where.
+4. Delete the proposal file: it was temporary, the decision now lives in those docs. A task that was
+   `blocked` on it goes back to `in-progress`, with its next step from your "After your answer" list.
+5. Tell the user in a few lines what you changed and where, then continue with that task.

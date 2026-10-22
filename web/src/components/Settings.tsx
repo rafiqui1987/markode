@@ -1,4 +1,4 @@
-import { Languages, MessageSquare, RotateCcw, SlidersHorizontal, Type, X } from 'lucide-react'
+import { Check, Copy, Languages, MessageSquare, RotateCcw, SlidersHorizontal, Type, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { type EditorSettings, type Info, type Lang, LANG_NAMES, LANGS, type ProposalLayout } from '../api'
 import { type T, UI_LANGS } from '../i18n'
@@ -38,7 +38,9 @@ interface Props {
   info: Info
   settings: EditorSettings
   onSettings: (s: EditorSettings) => void
-  onLanguages: (c: { sourceLang?: Lang; langs?: string[] }) => void
+  onLanguages: (c: { sourceLang?: Lang; langs?: string[]; langNames?: Record<string, string> }) => void
+  /** Translation files behind their source, in every language. */
+  pendingTranslations: number
   onProposals: (active: boolean, layout: ProposalLayout) => void
   onClose: () => void
 }
@@ -49,6 +51,66 @@ const SECTIONS: { id: SettingsSection; icon: typeof Type; label: 'settings.gener
   { id: 'languages', icon: Languages, label: 'settings.languages' },
   { id: 'proposals', icon: MessageSquare, label: 'settings.proposals' },
 ]
+
+/** A command for the agent with a button that copies it, e.g. `/mdrules translate`. */
+export function CopyCommand({ command, t }: { command: string; t: T }) {
+  const [copied, setCopied] = useState(false)
+  return (
+    <span className="copy-command">
+      <code>{command}</code>
+      <button
+        className="btn small"
+        onClick={() =>
+          navigator.clipboard?.writeText(command).then(() => {
+            setCopied(true)
+            setTimeout(() => setCopied(false), 1500)
+          })
+        }
+      >
+        {copied ? <Check size={12} /> : <Copy size={12} />} {copied ? t('app.copied') : t('app.copy')}
+      </button>
+    </span>
+  )
+}
+
+const OTHER = '__other__'
+
+/** Add a translation language: a built-in one, or any other by name and code (the AI translates into it). */
+function AddLanguage({ t, info, onAdd }: { t: T; info: Info; onAdd: (code: string, name?: string) => void }) {
+  const [other, setOther] = useState(false)
+  const [name, setName] = useState('')
+  const [code, setCode] = useState('')
+  const taken = (c: string) => c === info.sourceLang || info.langs.includes(c)
+  const validCode = /^[a-z]{2,3}(-[a-z0-9]{2,8})?$/i.test(code) && !taken(code.toLowerCase())
+  if (other)
+    return (
+      <div className="add-lang">
+        <input className="control" placeholder={t('settings.langName')} value={name} autoFocus onChange={(e) => setName(e.target.value)} />
+        <input className="control code" placeholder={t('settings.langCode')} value={code} maxLength={11} onChange={(e) => setCode(e.target.value)} />
+        <button className="btn small" disabled={!name.trim() || !validCode} onClick={() => (onAdd(code.toLowerCase(), name.trim()), setOther(false), setName(''), setCode(''))}>
+          {t('settings.add')}
+        </button>
+        <button className="icon-btn" title={t('app.close')} onClick={() => setOther(false)}>
+          <X size={14} />
+        </button>
+      </div>
+    )
+  return (
+    <select
+      className="control add-lang-select"
+      value=""
+      onChange={(e) => (e.target.value === OTHER ? setOther(true) : e.target.value && onAdd(e.target.value))}
+    >
+      <option value="">+ {t('settings.addLang')}</option>
+      {LANGS.filter((l) => !taken(l)).map((l) => (
+        <option key={l} value={l}>
+          {LANG_NAMES[l]}
+        </option>
+      ))}
+      <option value={OTHER}>{t('settings.otherLang')}</option>
+    </select>
+  )
+}
 
 function Slider({ label, value, min, max, step, unit, onChange }: { label: string; value: number; min: number; max: number; step: number; unit: string; onChange: (v: number) => void }) {
   return (
@@ -63,7 +125,7 @@ function Slider({ label, value, min, max, step, unit, onChange }: { label: strin
   )
 }
 
-export function Settings({ t, section: initialSection, theme, onTheme, info, settings, onSettings, onLanguages, onProposals, onClose }: Props) {
+export function Settings({ t, section: initialSection, theme, onTheme, info, settings, onSettings, onLanguages, pendingTranslations, onProposals, onClose }: Props) {
   const [section, setSection] = useState(initialSection)
   const set = (patch: Partial<EditorSettings>) => onSettings({ ...settings, ...patch })
   // Chosen before activating; once active, every change is saved right away.
@@ -186,21 +248,21 @@ export function Settings({ t, section: initialSection, theme, onTheme, info, set
               <p className="set-hint">{info.mainDoc ? t('settings.sourceHint', { doc: info.mainDoc }) : t('rules.noMain')}</p>
               <div className="set-row top">
                 <span className="set-label">{t('settings.translations')}</span>
-                {info.langs.length ? (
-                  <div className="chips">
-                    {info.langs.map((l) => (
-                      <button key={l} className="chip on" title={t('settings.removeLang')} onClick={() => onLanguages({ langs: info.langs.filter((x) => x !== l) })}>
-                        {info.langNames[l] ?? l} ×
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <span className="set-value">{t('settings.noTranslations')}</span>
-                )}
+                <div className="chips">
+                  {info.langs.map((l) => (
+                    <button key={l} className="chip on" title={t('settings.removeLang')} onClick={() => onLanguages({ langs: info.langs.filter((x) => x !== l) })}>
+                      {info.langNames[l] ?? l} ×
+                    </button>
+                  ))}
+                  <AddLanguage t={t} info={info} onAdd={(code, name) => onLanguages({ langs: [...info.langs, code], ...(name ? { langNames: { [code]: name } } : {}) })} />
+                </div>
               </div>
-              <p className="set-hint">
-                {t('settings.translationsHint')} {t('settings.addLangHint')} <code>mdrules translate</code>
-              </p>
+              <p className="set-hint">{t('settings.translationsHint')}</p>
+              {info.langs.length > 0 && pendingTranslations > 0 && (
+                <div className="set-callout">
+                  {t('settings.toTranslate', { n: pendingTranslations })} <CopyCommand command="/mdrules translate" t={t} />
+                </div>
+              )}
             </section>
           )}
 

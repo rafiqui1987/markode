@@ -1,6 +1,6 @@
 ---
 name: mdrules
-description: Conventions for every .md file in this project (CLAUDE.md, AGENTS.md, docs/) and the translation sync. Use when creating or editing any .md file, when finishing a task or phase, at the start of a session, or when the user runs /mdrules sync.
+description: Conventions for every .md file in this project (CLAUDE.md, AGENTS.md, docs/), keeping the docs consistent (/mdrules sync) and translating them (/mdrules translate). Use when creating or editing any .md file, at the start and end of a session, or when the user runs /mdrules sync or /mdrules translate.
 ---
 
 # mdrules
@@ -40,22 +40,42 @@ updated: YYYY-MM-DD
 
 Never edit the section between `<!-- mdrules:rules:start -->` and `<!-- mdrules:rules:end -->` by hand; it is generated from the user's rule presets.
 
-## Translation sync (`/mdrules sync`)
+## Docs sync (`/mdrules sync`)
 
-Run this when the user asks for `/mdrules sync`, at the start of a session, and after you edit any `.md` file.
+Keeps the docs consistent; it never touches translations. Run it when the user asks for `/mdrules sync`,
+at the start of a session (answered proposals first), after editing `.md` files and when closing a session.
 
-1. `mdrules sync --status --json` (use `pnpm exec mdrules` if it is a local dependency). It returns:
+1. `mdrules check --json` (use `pnpm exec mdrules` if it is a local dependency). It returns:
+   `{ proposals, phases: [{ phase, task, ticked, status }], projects: { missing, gone } | null, links: [{ file, line, target }] }`.
+2. `proposals`: answered proposals. Apply each one as the `mdrules-proposals` skill says ("When the user answers").
+3. `phases`: tick a task in its phase when it is `done`, untick it when it isn't; then set the phase's
+   `status` (`in-progress` once a task started, `done` when every task and "Definition of done" item is ticked).
+4. `projects`: projects missing from the main doc's "Projects" table, or rows whose folder is gone. Ask the
+   user before adding or removing rows.
+5. `links`: fix links to docs that were moved (find the new path); ask about docs that were deleted.
+6. Tell the user in one or two lines what you changed. If nothing came up, say the docs are consistent.
+
+## Translations (`/mdrules translate`)
+
+Only when the user asks for `/mdrules translate` (mdrules shows a button to copy it when translations
+fall behind). Never translate as a side effect of other work, and never change a source file without
+the user's approval.
+
+1. `mdrules translate --status --json`. It returns
    `{ sourceLang, langs, names, foreign: [{ path, detected }], files: [{ path, lang, status, translation }] }`.
    `names` maps each language code to its name (`ja` → `Japanese`): translate into that language, also for
    codes the user added by hand.
-2. **Files not in the source language** (`foreign`): ask the user, in one question listing them, whether to convert each one to `sourceLang`.
-   - Yes: rewrite the file in place in the source language, keeping structure, code, links and markers byte-identical.
-   - No: `mdrules sync --keep <path> [<path>...]` so they are not offered again.
-3. **Translations** (`files`, one entry per enabled language), by status:
-   - `missing` or `outdated`: translate the source `path` into `lang`, write it to `translation`.
-   - `pending-sync`: the user edited the translation. Apply their changes to the source `path` (translated into the source language, untouched parts byte-identical), then regenerate `translation` — and the other languages' translations of that file.
-   - `conflict`: both changed. Merge into the source file (source wins on contradictions), regenerate the translations, and tell the user what conflicted.
-   - `synced`: nothing to do.
-4. `mdrules sync --mark --lang <lang> <path> [<path>...]` for every translation you wrote (without `--lang` it marks every enabled language).
+2. `missing` or `outdated`: translate the source `path` into `lang` and write it to `translation`.
+3. **Changes that would touch a source file: ask first.** In one message, list each file with a one-line
+   summary of what would change, and apply only what the user approves:
+   - `pending-sync`: the user edited the translation; their changes would go into the source `path`
+     (translated into the source language, untouched parts byte-identical).
+   - `conflict`: both changed; propose a merge (source wins on contradictions) and show what conflicts.
+   - `foreign`: files not written in the source language; offer to convert them. For the ones the user
+     wants to keep: `mdrules translate --keep <path> [<path>...]`.
+   After applying, regenerate that file's translations in every language. What the user doesn't approve
+   stays as it is (still `pending-sync` or `conflict`).
+4. `mdrules translate --mark --lang <lang> <path> [<path>...]` for every translation you wrote (without
+   `--lang` it marks every enabled language).
 
 Translation rules: keep frontmatter keys, code blocks, `tree` and `mermaid` identifiers, link targets, table structure and the `<!-- ... -->` markers unchanged; translate only human text (including frontmatter values like titles, but not `status`/`type` values).

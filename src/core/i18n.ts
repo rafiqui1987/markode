@@ -96,7 +96,7 @@ export function foreignFiles(root: string, sourceLang: Lang): ForeignEntry[] {
   return out
 }
 
-/** Everything the AI needs for `/mdrules sync`. */
+/** Everything the AI needs for `/mdrules translate`. */
 export function syncReport(root: string) {
   const config = readConfig(root)
   const sourceLang = projectSourceLang(root, config?.mainDoc)

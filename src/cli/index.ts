@@ -1,6 +1,10 @@
+import fs from 'node:fs'
+import path from 'node:path'
+import { checkDocs } from '../core/check.js'
 import { readConfig } from '../core/config.js'
 import { readDefaults, type SetupDefaults } from '../core/defaults.js'
 import { keepLanguage, markSynced, syncReport } from '../core/i18n.js'
+import { answerSummary, waitForAnswer } from '../core/wait.js'
 import { startServer } from '../server/index.js'
 import { runInit, runSetup } from './init.js'
 import { runTranslate } from './translate.js'
@@ -13,9 +17,13 @@ Usage
   mdrules setup           choose how projects are set up: with your saved answers, or asking each time
   mdrules serve           open the editor without running init
   mdrules translate       choose languages to review the docs in (or: mdrules --translate)
-  mdrules sync --status [--json]                    translations + files not in the source language
-  mdrules sync --mark [--lang xx] <path...>|--all   record translations as in sync
-  mdrules sync --keep <path...>                     keep files in their current language
+  mdrules check [--json]  what /mdrules sync fixes: answered proposals, phases vs tasks, projects table, broken links
+  mdrules wait <proposal> wait until the user answers a proposal in mdrules, then print the answer
+
+For the agent's /mdrules translate:
+  mdrules translate --status [--json]                    translations + files not in the source language
+  mdrules translate --mark [--lang xx] <path...>|--all   record translations as in sync
+  mdrules translate --keep <path...>                     keep files in their current language
 
 Options
   -D           first run: skip saving defaults; every project asks its own questions
@@ -36,8 +44,12 @@ const root = process.env.MDRULES_ROOT ?? process.cwd()
 async function main() {
   if (flag('--help') || flag('-h')) return console.log(HELP)
 
-  if (command === 'sync') return sync()
+  // `sync --status|--mark|--keep` is the name older skills use for the translation commands.
+  const translation = flag('--status') || flag('--mark') || flag('--keep')
+  if ((command === 'sync' || command === 'translate') && translation) return sync()
   if (command === 'translate' || flag('--translate')) return runTranslate(root)
+  if (command === 'check') return check()
+  if (command === 'wait') return wait()
   if (command === 'setup') {
     await runSetup(flag('-D'))
     return
@@ -63,6 +75,35 @@ async function main() {
 async function defaults(): Promise<SetupDefaults | null> {
   const d = readDefaults() ?? (process.stdin.isTTY ? await runSetup(flag('-D')) : null)
   return d?.mode === 'defaults' ? d : null
+}
+
+function check() {
+  const report = checkDocs(root)
+  if (flag('--json')) return console.log(JSON.stringify(report, null, 2))
+  const lines = [
+    ...report.proposals.map((p) => `answered proposal  ${p}`),
+    ...report.phases.map((p) => `phase vs task      ${p.phase}: ${p.task} is ${p.status || 'without status'} but ${p.ticked ? 'ticked' : 'not ticked'}`),
+    ...(report.projects?.missing ?? []).map((d) => `project not listed ${d}/`),
+    ...(report.projects?.gone ?? []).map((d) => `project gone       ${d}/`),
+    ...report.links.map((l) => `broken link        ${l.file}:${l.line} → ${l.target}`),
+  ]
+  console.log(lines.length ? lines.join('\n') : 'Docs are consistent.')
+}
+
+async function wait() {
+  const rel = args[1]
+  if (!rel || !fs.existsSync(path.join(root, rel))) {
+    console.error(`Usage: mdrules wait <proposal.md> (relative to ${root})`)
+    process.exitCode = 1
+    return
+  }
+  const result = await waitForAnswer(root, rel)
+  if (result === 'gone') {
+    console.log(`${rel} was deleted or is no longer a proposal.`)
+    process.exit(0)
+  }
+  console.log(answerSummary(root, rel))
+  process.exit(0)
 }
 
 function sync() {

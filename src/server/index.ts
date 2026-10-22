@@ -8,11 +8,12 @@ import { WebSocketServer } from 'ws'
 import { isLang, isLangCode, type Lang, langName, readConfig, readSettings, safeResolve, stateDir, toPosix, WEB_DIR, writeConfig, writeSettings } from '../core/config.js'
 import { summarize } from '../core/dashboard.js'
 import { gitDiff, gitStatuses, isGitRepo } from '../core/git.js'
-import { allStatuses, fileStatus, foreignFiles, keepLanguage, translationPath } from '../core/i18n.js'
+import { allStatuses, fileStatus, foreignFiles, keepLanguage, syncReport, translationPath } from '../core/i18n.js'
 import { appliedRuleIds, applyRulesToFile, deleteRule, listRules, projectSourceLang, saveRule } from '../core/rules.js'
 import { scanTree, setIgnored, watchSkips } from '../core/scan.js'
 import { activateProposals, authorName, deactivateProposals, proposalsState } from '../core/proposals.js'
 import { sddPrefixes, summarizeSdd } from '../core/sdd.js'
+import { waitingOn } from '../core/wait.js'
 import { getSkill, installSkill, listSkills, PROJECT_TARGETS, type ProjectTarget, projectTargets, setSkillTags, skillSources } from '../core/skills.js'
 
 interface Options {
@@ -115,6 +116,10 @@ export async function startServer({ root, port, open: openBrowser }: Options) {
     'PUT /api/config': (_, body) => {
       const c = config()
       if (Array.isArray(body.langs)) c.langs = body.langs.filter(isLangCode)
+      // Names of languages typed by hand (`ja` → "Japanese"): the AI translates into that language.
+      if (body.langNames && typeof body.langNames === 'object')
+        for (const [code, name] of Object.entries(body.langNames))
+          if (isLangCode(code) && !isLang(code) && typeof name === 'string' && name.trim()) c.langNames = { ...c.langNames, [code]: name.trim().slice(0, 40) }
       if (isLang(body.sourceLang) && body.sourceLang !== sourceLang()) {
         if (!c.mainDoc) throw new HttpError(400, 'No main document configured; run `mdrules init`')
         applyRulesToFile(path.join(root, c.mainDoc), undefined, body.sourceLang)
@@ -128,6 +133,10 @@ export async function startServer({ root, port, open: openBrowser }: Options) {
       else deactivateProposals(root, config().mainDoc)
       return proposalsState(root)
     },
+    /** Translation files behind their source, in every enabled language: work for `/mdrules translate`. */
+    'GET /api/translations': () => ({ pending: syncReport(root).files.filter((f) => f.status !== 'synced').length + foreignFiles(root, sourceLang()).length }),
+    /** Proposals an agent is waiting on (`mdrules wait`): answering them wakes it up. */
+    'GET /api/waiting': () => ({ paths: waitingOn(root) }),
     'GET /api/settings': () => readSettings(),
     'PUT /api/settings': (_, body) => writeSettings(body),
     'GET /api/tree': (url) => {

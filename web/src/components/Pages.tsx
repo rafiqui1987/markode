@@ -14,7 +14,7 @@ export function StatusChip({ status, t }: { status: string | null; t: T }) {
 // ------------------------------------------------------------ proposals
 
 /** Above a proposal: what it waits for, and the button that sends the answer back to the AI. */
-export function ProposalBanner({ status, copied, affects, t, onSend, onOpen }: { status: string | null; copied: boolean; affects: string[]; t: T; onSend: () => void; onOpen: (p: string) => void }) {
+export function ProposalBanner({ status, copied, listening, affects, t, onSend, onOpen }: { status: string | null; copied: boolean; listening: boolean; affects: string[]; t: T; onSend: () => void; onOpen: (p: string) => void }) {
   const changes = affects.length > 0 && (
     <div className="banner proposal affects">
       {t('proposal.affects')}
@@ -30,7 +30,7 @@ export function ProposalBanner({ status, copied, affects, t, onSend, onOpen }: {
     return (
       <>
         <div className="banner proposal answered">
-          <Check size={14} /> {copied ? t('proposal.copied') : t('proposal.answered')}
+          <Check size={14} /> {listening ? t('proposal.listening') : copied ? t('proposal.copied') : t('proposal.answered')}
         </div>
         {changes}
       </>

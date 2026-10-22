@@ -1,4 +1,4 @@
-import { ChevronRight, FileText, GitCompare, LayoutDashboard, Moon, PanelLeftClose, PanelLeftOpen, Redo2, RotateCcw, ScrollText, Settings as SettingsIcon, Sparkles, Sun, Undo2 } from 'lucide-react'
+import { Check, ChevronRight, Copy, FileText, GitCompare, LayoutDashboard, Moon, PanelLeftClose, PanelLeftOpen, Redo2, RotateCcw, ScrollText, Settings as SettingsIcon, Sparkles, Sun, Undo2 } from 'lucide-react'
 import { type CSSProperties, type PointerEvent as ReactPointerEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { api, type EditorSettings, type ProposalLayout, type FileData, type Info, type Lang, LANG_NAMES, type SyncStatus, subscribe, type TreeData, type TreeNode } from './api'
 import { type EditHistory, Editor, type EditorCommands, NO_HISTORY } from './components/Editor'
@@ -85,6 +85,10 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState<SettingsSection | null>(null)
   /** Set once the user sends their answer to a proposal, until another file opens. */
   const [answered, setAnswered] = useState<string | null>(null)
+  /** The agent was waiting on that proposal (`mdrules wait`), so nothing had to be copied. */
+  const [listening, setListening] = useState(false)
+  const [pendingTranslations, setPendingTranslations] = useState(0)
+  const [copiedTranslate, setCopiedTranslate] = useState(false)
   const [editHistory, setEditHistory] = useState<EditHistory>(NO_HISTORY)
   const editorCommands = useRef<EditorCommands | null>(null)
   const [sidebarWidth, setSidebarWidth] = useState(() => Number(store.get('mdrules.sidebarWidth')) || SIDEBAR_DEFAULT)
@@ -114,6 +118,10 @@ export function App() {
   useEffect(() => {
     if (info) refreshTree()
   }, [info, viewLang])
+  useEffect(() => {
+    if (info?.langs.length) api.translations().then((r) => setPendingTranslations(r.pending)).catch(() => {})
+    else setPendingTranslations(0)
+  }, [info, tick])
   useEffect(() => applySettings(settings), [settings])
   useEffect(() => store.set('mdrules.uiLang', settings.uiLang), [settings.uiLang])
   useEffect(() => {
@@ -200,14 +208,27 @@ export function App() {
     setInfo(await api.info())
   }
 
-  // Answering a proposal: mark it answered and copy a message for the AI chat.
-  const sendAnswer = () => {
+  // Answering a proposal: mark it answered. An agent waiting on it (`mdrules wait`) wakes up by itself;
+  // otherwise a message for the AI chat is copied.
+  const sendAnswer = async () => {
     if (!selected) return
+    const path = selected
+    const waiting = await api
+      .waiting()
+      .then((r) => r.paths.includes(path))
+      .catch(() => false)
     editorCommands.current?.setField('status', 'answered')
     editorCommands.current?.setField('updated', today())
-    navigator.clipboard?.writeText(t('proposal.message', { path: selected })).catch(() => {})
-    setAnswered(selected)
+    if (!waiting) navigator.clipboard?.writeText(t('proposal.message', { path })).catch(() => {})
+    setListening(waiting)
+    setAnswered(path)
   }
+
+  const copyTranslate = () =>
+    navigator.clipboard?.writeText('/mdrules translate').then(() => {
+      setCopiedTranslate(true)
+      setTimeout(() => setCopiedTranslate(false), 1500)
+    })
 
   const changeLanguages = async (c: { sourceLang?: Lang; langs?: string[] }) => {
     await api.setConfig(c).catch((e) => alert(e.message))
@@ -239,7 +260,6 @@ export function App() {
     refreshTree()
   }
 
-  const pendingCount = Object.values(data.sync).filter((s) => s === 'pending-sync' || s === 'conflict').length
   const status: SyncStatus | null = file?.status ?? null
   const crumbs = selected?.split('/') ?? []
   const commentAs = info?.proposals.active ? (info.author ?? t('comment.me')) : null
@@ -272,7 +292,11 @@ export function App() {
           ))}
         </nav>
         <div className="spacer" />
-        {pendingCount > 0 && <span className="pill warn">{t('sync.pendingCount', { n: pendingCount })}</span>}
+        {pendingTranslations > 0 && (
+          <button className="pill warn" title={t('sync.copyCommand')} onClick={copyTranslate}>
+            {copiedTranslate ? <Check size={12} /> : <Copy size={12} />} {copiedTranslate ? t('app.copied') : t('sync.pendingCount', { n: pendingTranslations })}
+          </button>
+        )}
         {info && info.langs.length > 0 && (
           <select className="control" title={t('app.language')} value={viewLang} onChange={(e) => setLang(e.target.value)}>
             <option value={sourceLang}>
@@ -340,7 +364,7 @@ export function App() {
                 <span className="save">{saving ? t('app.saving') : file ? t('app.saved') : ''}</span>
               </div>
               {file && fieldOf(file.content, 'type') === 'proposal' && (
-                <ProposalBanner status={statusOf(file.content) !== 'applied' && answered === selected ? 'answered' : statusOf(file.content)} copied={answered === selected} affects={affectsOf(file.content)} t={t} onSend={sendAnswer} onOpen={open} />
+                <ProposalBanner status={statusOf(file.content) !== 'applied' && answered === selected ? 'answered' : statusOf(file.content)} copied={answered === selected} listening={answered === selected && listening} affects={affectsOf(file.content)} t={t} onSend={sendAnswer} onOpen={open} />
               )}
               {viewLang !== sourceLang && status && status !== 'synced' && (
                 <div className={`banner sync-${status}`}>
@@ -390,7 +414,7 @@ export function App() {
         {view === 'skills' && <Skills t={t} tick={tick} look={{ layoutKey, wrap: settings.wrap, theme: resolvedTheme }} />}
       </main>
 
-      {settingsOpen && info && <Settings t={t} section={settingsOpen} theme={theme} onTheme={setTheme} info={info} settings={settings} onSettings={changeSettings} onLanguages={changeLanguages} onProposals={changeProposals} onClose={() => setSettingsOpen(null)} />}
+      {settingsOpen && info && <Settings t={t} section={settingsOpen} pendingTranslations={pendingTranslations} theme={theme} onTheme={setTheme} info={info} settings={settings} onSettings={changeSettings} onLanguages={changeLanguages} onProposals={changeProposals} onClose={() => setSettingsOpen(null)} />}
     </div>
   )
 }

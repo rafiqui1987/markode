@@ -15,7 +15,7 @@ const OTHER = '__other__'
 
 /**
  * Pick the languages to review the docs in. The files stay in the source language; translations are
- * written by the AI (`/mdrules sync`). A language not built in can be typed: the AI translates the docs
+ * written by the AI (`/mdrules translate`). A language not built in can be typed: the AI translates the docs
  * into it, and the interface stays in English.
  */
 export async function runTranslate(root: string) {
@@ -67,7 +67,7 @@ export async function runTranslate(root: string) {
   p.outro(
     [
       `Translations: ${langs.map((l) => langName(l, { ...config, langNames: names })).join(', ')}.`,
-      `Ask your agent for ${pc.cyan('/mdrules sync')} to translate the docs; then pick the language at the top of mdrules.`,
+      `Ask your agent for ${pc.cyan('/mdrules translate')} to translate the docs; then pick the language at the top of mdrules.`,
       ...(langs.some((l) => !isLang(l)) ? ['Menus stay in English for languages typed by hand.'] : []),
     ].join('\n'),
   )

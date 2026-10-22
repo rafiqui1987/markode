@@ -75,7 +75,7 @@ agents; each user edits it and adds their own in the Rules tab:
 - The **interface language** is a separate, personal setting (Settings → General), English by default.
 - The source file is never overwritten by the app directly from a translation.
 - Translation is done by the **AI through the skill** (no API key in the app).
-- Files whose prose is not in the source language are flagged (badge + banner). `/mdrules sync` asks whether to convert them; "no" is remembered (`mdrules sync --keep`).
+- Files whose prose is not in the source language are flagged (badge + banner). `/mdrules translate` asks whether to convert them; "no" is remembered (`mdrules translate --keep`).
 
 ### Storage
 
@@ -99,15 +99,17 @@ agents; each user edits it and adds their own in the Rules tab:
 
 `state.json` keeps, per file, the hash of the English source and of the translation.
 
-| Detected change | Status | What the AI does on `/mdrules sync` |
+| Detected change | Status | What the AI does on `/mdrules translate` |
 |---|---|---|
 | English changed | `outdated` | Re-translates into the second language |
-| Translation edited by the user | `pending-sync` | Updates the English file, then refreshes the translation |
-| Both changed | `conflict` | Merges both, English wins on contradictions, reports it |
+| Translation edited by the user | `pending-sync` | Asks; if approved, updates the English file, then refreshes the translations |
+| Both changed | `conflict` | Asks with a proposed merge (English wins on contradictions) |
 | No translation yet | `missing` | Translates the file |
 
-- mdrules shows the status per file in the sidebar (badge) and a "pending sync" counter.
-- The skill tells the AI to run the sync check at the start of each session and after editing any .md.
+- Translating only happens when the user asks for `/mdrules translate`; mdrules shows a "to translate"
+  counter in the top bar and in Settings, with a button that copies the command.
+- `/mdrules sync` is a different job: it keeps the docs consistent (answered proposals, phases vs tasks,
+  projects table, broken links; `mdrules check`), at the start and end of each session.
 
 ## 5. Settings
 
@@ -189,7 +191,7 @@ Phases are created over time as the project evolves; no fixed structure up front
 |---|---|
 | D1 | Frontmatter keys and all `.md` files in English |
 | D2 | Tool name `mdrules`; installed with pnpm |
-| D3 | Translation done by the AI via the skill (`/mdrules sync`), no API key |
+| D3 | Translation done by the AI via the skill (`/mdrules translate`), no API key |
 | D4 | Translations in `.mdrules/i18n/`, hidden and git-ignored |
 | D5 | Base `/docs`: `architecture.md`, `rules.md`, `tasks.md`, `decisions.md`, `phases/` |
 | D6 | Palette: dark by default + light theme; one hue per element type (CSS tokens in `web/src/styles.css`) |
@@ -202,6 +204,5 @@ Phases are created over time as the project evolves; no fixed structure up front
 ## 10. Next
 
 - [ ] "Mark as reviewed" snapshot in the changes view
-- [ ] Hook that runs `/mdrules sync` automatically after each AI turn
 - [ ] Rename / move / delete files from the sidebar
 - [ ] Publish to npm

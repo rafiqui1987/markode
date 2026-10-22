@@ -32,8 +32,9 @@ function section(layout: ProposalLayout) {
     'temporary proposal the user answers in mdrules instead of a chat answer (skill: `mdrules-proposals`).',
     '',
     `- Where: ${WHERE[layout]}.`,
-    '- The user ticks options and comments (`<!-- comment by … -->`). When they say it is answered, reply to the',
-    '  comments, update every doc that depends on the decision (tasks, phases, architecture…), then delete the proposal.',
+    '- After writing one, run `mdrules wait <path>` in the background: it returns when the user answers in mdrules.',
+    '- The user ticks options and comments (`<!-- comment by … -->`). When it is answered, reply to the comments,',
+    '  update every doc that depends on the decision (tasks, phases, architecture…), then delete the proposal.',
   ].join('\n')
 }
 
