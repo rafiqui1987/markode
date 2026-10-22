@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { TEMPLATES_DIR, toPosix } from './config.js'
+import { linkMainDoc, type MainDoc, missingMainDoc, TEMPLATES_DIR, toPosix } from './config.js'
+import { findSubprojects, scanTree } from './scan.js'
 
 export const today = () => new Date().toISOString().slice(0, 10)
 
@@ -60,4 +61,17 @@ export function hideInVsCode(root: string) {
   fs.mkdirSync(path.dirname(file), { recursive: true })
   fs.writeFileSync(file, JSON.stringify(settings, null, 2) + '\n')
   return true
+}
+
+/** Main docs the project lacks: in the root or a subproject that has only CLAUDE.md or only AGENTS.md. */
+export function missingMainDocs(root: string): { path: string; pointsTo: MainDoc }[] {
+  return ['', ...findSubprojects(scanTree(root))].flatMap((dir) => {
+    const doc = missingMainDoc(path.join(root, dir))
+    return doc ? [{ path: path.posix.join(dir, doc), pointsTo: doc === 'CLAUDE.md' ? ('AGENTS.md' as const) : ('CLAUDE.md' as const) }] : []
+  })
+}
+
+/** Create every missing main doc as a pointer to the existing one; returns the created paths. */
+export function linkMainDocs(root: string): string[] {
+  return missingMainDocs(root).flatMap((m) => (linkMainDoc(path.join(root, path.posix.dirname(m.path))) ? [m.path] : []))
 }

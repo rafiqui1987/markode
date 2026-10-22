@@ -28,8 +28,8 @@ async function offerClaudeLink(root: string, d: SetupDefaults | null) {
 }
 
 async function chooseMainDoc(root: string, d: SetupDefaults | null): Promise<string> {
-  // A CLAUDE.md that only imports AGENTS.md is not a main doc of its own.
-  const existing = MAIN_DOCS.filter((d) => fs.existsSync(path.join(root, d)) && !(d === 'CLAUDE.md' && isPointer(fs.readFileSync(path.join(root, d), 'utf8'))))
+  // A main doc that only points to the other one is not a main doc of its own.
+  const existing = MAIN_DOCS.filter((d) => fs.existsSync(path.join(root, d)) && !isPointer(fs.readFileSync(path.join(root, d), 'utf8'), d))
   if (d) {
     if (existing.length === 1 && existing[0] === 'AGENTS.md') await offerClaudeLink(root, d)
     if (existing.length) return existing.includes(d.mainDoc) ? d.mainDoc : existing[0]

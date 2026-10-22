@@ -1,9 +1,10 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { checkDocs } from '../core/check.js'
-import { readConfig } from '../core/config.js'
+import { PKG_ROOT, readConfig, writeConfig } from '../core/config.js'
 import { readDefaults, type SetupDefaults } from '../core/defaults.js'
 import { keepLanguage, markSynced, syncReport } from '../core/i18n.js'
+import { linkMainDocs, missingMainDocs } from '../core/scaffold.js'
 import { answerSummary, waitForAnswer } from '../core/wait.js'
 import { startServer } from '../server/index.js'
 import { runInit, runSetup } from './init.js'
@@ -19,6 +20,8 @@ Usage
   markode translate       choose languages to review the docs in (or: markode --translate)
   markode check [--json]  what /markode sync fixes: answered proposals, phases vs tasks, projects table, broken links
   markode wait <proposal> wait until the user answers a proposal in markode, then print the answer
+  markode link [--dry-run] where there is only CLAUDE.md or only AGENTS.md, add the other one pointing to it
+  markode link --skip     don't offer it again in this project
 
 For the agent's /markode translate:
   markode translate --status [--json]                    translations + files not in the source language
@@ -26,6 +29,7 @@ For the agent's /markode translate:
   markode translate --keep <path...>                     keep files in their current language
 
 Options
+  -v, --version  print the version
   -D           first run: skip saving defaults; every project asks its own questions
   --custom     init: ask every question for this project, ignoring your defaults
   --port <n>   server port (default 4319)
@@ -43,6 +47,7 @@ const root = process.env.MARKODE_ROOT ?? process.cwd()
 
 async function main() {
   if (flag('--help') || flag('-h')) return console.log(HELP)
+  if (flag('--version') || flag('-v')) return console.log(JSON.parse(fs.readFileSync(path.join(PKG_ROOT, 'package.json'), 'utf8')).version)
 
   // `sync --status|--mark|--keep` is the name older skills use for the translation commands.
   const translation = flag('--status') || flag('--mark') || flag('--keep')
@@ -50,6 +55,7 @@ async function main() {
   if (command === 'translate' || flag('--translate')) return runTranslate(root)
   if (command === 'check') return check()
   if (command === 'wait') return wait()
+  if (command === 'link') return link()
   if (command === 'setup') {
     await runSetup(flag('-D'))
     return
@@ -63,6 +69,9 @@ async function main() {
     // Saved defaults need no answers, so they also apply without a terminal.
     else if (readDefaults()?.mode === 'defaults') await runInit(root, readDefaults())
   }
+  const unlinked = command === 'start' && process.stdout.isTTY && !readConfig(root)?.skipLink ? missingMainDocs(root) : []
+  if (unlinked.length)
+    console.log(`Tip: Claude Code reads CLAUDE.md and other agents read AGENTS.md; ${unlinked.map((m) => m.path).join(', ')} missing. Run \`markode link\` (or \`markode link --skip\`).`)
   if (command === 'start' || command === 'serve') {
     await startServer({ root, port: Number(option('--port') ?? 4319), open: !flag('--no-open') })
     return
@@ -88,6 +97,21 @@ function check() {
     ...report.links.map((l) => `broken link        ${l.file}:${l.line} → ${l.target}`),
   ]
   console.log(lines.length ? lines.join('\n') : 'Docs are consistent.')
+}
+
+/** Claude Code reads CLAUDE.md, other agents AGENTS.md: give each folder both, one pointing to the other. */
+function link() {
+  const config = readConfig(root)
+  if (flag('--skip')) {
+    if (config) writeConfig(root, { ...config, skipLink: true })
+    return console.log('markode won\'t offer to link CLAUDE.md and AGENTS.md in this project again.')
+  }
+  // A dry run is how the agent checks at the start of a session: say nothing once the user declined.
+  if (flag('--dry-run') && config?.skipLink) return console.log('Skipped: the user chose not to link the main docs.')
+  const missing = missingMainDocs(root)
+  if (!missing.length) return console.log('Every main doc has its CLAUDE.md and AGENTS.md (or neither).')
+  if (flag('--dry-run')) return console.log(missing.map((m) => `would create ${m.path} → ${m.pointsTo}`).join('\n'))
+  for (const p of linkMainDocs(root)) console.log(`created ${p}`)
 }
 
 async function wait() {

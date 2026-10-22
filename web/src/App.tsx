@@ -408,7 +408,21 @@ export function App() {
           ) : (
             <div className="empty">{t('app.noFile')}</div>
           ))}
-        {view === 'dashboard' && <Dashboard t={t} tick={tick} onOpen={open} proposalsActive={!!info?.proposals.active} onActivateProposals={() => setSettingsOpen('proposals')} />}
+        {view === 'dashboard' && (
+          <Dashboard
+            t={t}
+            tick={tick}
+            onOpen={open}
+            proposalsActive={!!info?.proposals.active}
+            onActivateProposals={() => setSettingsOpen('proposals')}
+            unlinked={info?.unlinked ?? []}
+            onLink={async (skip) => {
+              await api.link(skip).catch((e) => alert(e.message))
+              setInfo(await api.info())
+              refreshTree()
+            }}
+          />
+        )}
         {view === 'changes' && <Changes t={t} git={data.git} enabled={!!info?.git} tick={tick} />}
         {view === 'rules' && <Rules t={t} />}
         {view === 'skills' && <Skills t={t} tick={tick} look={{ layoutKey, wrap: settings.wrap, theme: resolvedTheme }} />}

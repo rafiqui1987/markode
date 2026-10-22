@@ -12,6 +12,16 @@ The user reads and edits this project's Markdown in **markode**, a visual editor
 - Every `.md` file is written in the project's **source language**, declared in the main doc's "Working rules" section (`<!-- markode:source-lang:xx -->`, default English). Frontmatter keys are always English.
 - Translations live in `.markode/i18n/<lang>/<same path>` (hidden, git-ignored). Never treat them as sources.
 
+## CLAUDE.md and AGENTS.md
+
+Claude Code reads `CLAUDE.md`; Codex, Cursor, Gemini and most other agents read `AGENTS.md`. At the
+start of a session, run `markode link --dry-run`. If it lists files to create (for example, the project
+was set up with another agent and has only `AGENTS.md`), ask the user once, in one line, whether to
+create them. Each one only points to the existing doc; nothing is copied.
+
+- Yes: `markode link`.
+- No: `markode link --skip`, so it isn't offered again.
+
 ## Frontmatter
 
 Docs that track work start with a frontmatter block; the markode dashboard reads it:

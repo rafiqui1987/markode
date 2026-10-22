@@ -36,6 +36,8 @@ export interface Info {
   proposals: { active: boolean; layout: ProposalLayout }
   /** Signs comments (git user.name); null when unknown. */
   author: string | null
+  /** CLAUDE.md / AGENTS.md the project lacks (empty once the user declined): `markode link` adds them. */
+  unlinked: { path: string; pointsTo: string }[]
 }
 
 export type ProposalLayout = 'general' | 'structured'
@@ -134,6 +136,7 @@ export const api = {
   setConfig: (config: { langs?: string[]; langNames?: Record<string, string>; sourceLang?: Lang }) => call('PUT', '/api/config', config),
   translations: () => call<{ pending: number }>('GET', '/api/translations'),
   waiting: () => call<{ paths: string[] }>('GET', '/api/waiting'),
+  link: (skip = false) => call<{ created: string[] }>('POST', '/api/link', { skip }),
   settings: () => call<EditorSettings>('GET', '/api/settings'),
   saveSettings: (s: Partial<EditorSettings>) => call<EditorSettings>('PUT', '/api/settings', s),
   keepLanguage: (path: string) => call('POST', '/api/keep-language', { path }),

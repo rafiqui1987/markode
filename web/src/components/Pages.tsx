@@ -1,4 +1,4 @@
-import { Check, MessageSquareText, Plus, Save, Send, Trash2, X } from 'lucide-react'
+import { Check, Link2, MessageSquareText, Plus, Save, Send, Trash2, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { api, type DocSummary, type GitStatus, type Progress, type Rule, type SddSummary } from '../api'
 import type { T, TKey } from '../i18n'
@@ -277,7 +277,26 @@ function TaskBoard({ tasks, t, onOpen }: { tasks: DocSummary[]; t: T; onOpen: (p
   )
 }
 
-export function Dashboard({ t, tick, onOpen, proposalsActive, onActivateProposals }: { t: T; tick: number; onOpen: (p: string) => void; proposalsActive: boolean; onActivateProposals: () => void }) {
+/** Claude Code reads CLAUDE.md, other agents AGENTS.md: offer the one the project lacks, pointing to the other. */
+function LinkTip({ t, unlinked, onLink }: { t: T; unlinked: { path: string; pointsTo: string }[]; onLink: (skip: boolean) => void }) {
+  return (
+    <div className="tip">
+      <Link2 size={18} />
+      <div>
+        <strong>{t('dash.linkTitle')}</strong>
+        <p>{t('dash.link', { files: unlinked.map((u) => `${u.path} → ${u.pointsTo}`).join(', ') })}</p>
+      </div>
+      <button className="btn primary" onClick={() => onLink(false)}>
+        {t('dash.linkCreate')}
+      </button>
+      <button className="btn" onClick={() => onLink(true)}>
+        {t('dash.linkSkip')}
+      </button>
+    </div>
+  )
+}
+
+export function Dashboard({ t, tick, onOpen, proposalsActive, onActivateProposals, unlinked, onLink }: { t: T; tick: number; onOpen: (p: string) => void; proposalsActive: boolean; onActivateProposals: () => void; unlinked: { path: string; pointsTo: string }[]; onLink: (skip: boolean) => void }) {
   const [docs, setDocs] = useState<DocSummary[]>([])
   const [sdd, setSdd] = useState<SddSummary>({})
   useEffect(() => {
@@ -295,6 +314,7 @@ export function Dashboard({ t, tick, onOpen, proposalsActive, onActivateProposal
 
   return (
     <div className="page">
+      {unlinked.length > 0 && <LinkTip t={t} unlinked={unlinked} onLink={onLink} />}
       {!proposalsActive && <ProposalsTip t={t} onActivate={onActivateProposals} />}
       {proposals.length > 0 && <Proposals docs={proposals} t={t} onOpen={onOpen} />}
       {sdd.openspec && <OpenSpecSection data={sdd.openspec} t={t} onOpen={onOpen} />}

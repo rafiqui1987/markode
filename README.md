@@ -180,8 +180,12 @@ flowchart LR
   overview: a table of the projects, what each one is and where its docs live. The root `docs/` holds
   vision, phases and work across projects (`CORE-001`). The agent reads only the project it is
   working on. A project's existing `CLAUDE.md`/`AGENTS.md` is kept as is: markode only adds a short
-  block pointing to its docs. Where there is only `AGENTS.md` and you use Claude Code, it adds a
-  one-line `CLAUDE.md` that imports it (`@AGENTS.md`), since Claude Code reads `CLAUDE.md`.
+  block pointing to its docs.
+- **Every agent finds the instructions**: Claude Code reads `CLAUDE.md`; Codex, Cursor, Gemini and
+  others read `AGENTS.md`. Where a folder has only one, markode offers the other, pointing to it (a
+  one-line `CLAUDE.md` with `@AGENTS.md`, or an `AGENTS.md` that sends agents to `CLAUDE.md`) in the
+  Dashboard and from the agent at the start of a session (`markode link`); the setup offers the
+  `CLAUDE.md` one. Nothing is copied; `markode link --skip` stops the offer.
 - **The Dashboard** shows each phase with its progress and tasks, and a board of what is in progress,
   blocked and pending.
 
@@ -279,6 +283,8 @@ markode -D                  # first run: don't save defaults, ask in each projec
 markode serve               # open the editor without the setup
 markode serve --port 5000 --no-open
 markode translate           # choose languages to review the docs in (also: markode --translate)
+markode link                # only CLAUDE.md or only AGENTS.md? add the other one, pointing to it
+markode -v                  # version
 ```
 
 To keep it installed: `npm install -g @rafiqui987/markode` (or `pnpm add -g @rafiqui987/markode`).

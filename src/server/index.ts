@@ -13,6 +13,7 @@ import { appliedRuleIds, applyRulesToFile, deleteRule, listRules, projectSourceL
 import { scanTree, setIgnored, watchSkips } from '../core/scan.js'
 import { activateProposals, authorName, deactivateProposals, proposalsState } from '../core/proposals.js'
 import { sddPrefixes, summarizeSdd } from '../core/sdd.js'
+import { linkMainDocs, missingMainDocs } from '../core/scaffold.js'
 import { waitingOn } from '../core/wait.js'
 import { getSkill, installSkill, listSkills, PROJECT_TARGETS, type ProjectTarget, projectTargets, setSkillTags, skillSources } from '../core/skills.js'
 
@@ -111,6 +112,7 @@ export async function startServer({ root, port, open: openBrowser }: Options) {
         git: isGitRepo(root),
         proposals: proposalsState(root),
         author: authorName(root),
+        unlinked: c.skipLink ? [] : missingMainDocs(root),
       }
     },
     'PUT /api/config': (_, body) => {
@@ -127,6 +129,11 @@ export async function startServer({ root, port, open: openBrowser }: Options) {
       // Kept as chosen; the source language is filtered out wherever it is read.
       writeConfig(root, c)
       return { ...c, langs: c.langs.filter((l) => l !== sourceLang()) }
+    },
+    /** Add the CLAUDE.md / AGENTS.md a folder lacks, pointing to the other; or stop offering it. */
+    'POST /api/link': (_, body) => {
+      if (body.skip) return writeConfig(root, { ...config(), skipLink: true }), { created: [] }
+      return { created: linkMainDocs(root) }
     },
     'PUT /api/proposals': (_, body) => {
       if (body.active) activateProposals(root, body.layout === 'structured' ? 'structured' : 'general', config().mainDoc)
