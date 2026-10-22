@@ -116,9 +116,12 @@ flowchart LR
 - **Sessions pick up where they stopped**: the agent looks for tasks `in-progress`, reads their "Next
   step" and tells you where you left off. `/mdrules-new-task` creates a task in the right place, and
   `/mdrules-close-session` logs what was done, the next step and the status.
-- **Monorepos**: each area (`apps/`, `services/`…) gets its own short `CLAUDE.md`, `docs/ARCHITECTURE.md`
-  and tasks with its own prefix (`APP-001`, `SVC-001`); the root `docs/` holds vision, phases and
-  cross-area tasks (`CORE-001`). The agent reads only the area it is working on.
+- **Monorepos**: each project (`apps/web`, `services/api`… or each repository in a folder of repos)
+  gets its own short `CLAUDE.md`/`AGENTS.md`, `docs/ARCHITECTURE.md`, proposals and tasks with its own
+  prefix (`WEB-001`, `API-001`). The root main doc is the overview: a table of the projects, what each
+  one is and where its docs live. The root `docs/` holds vision, phases and work across projects
+  (`CORE-001`). The agent reads only the project it is working on. A project's existing
+  `CLAUDE.md`/`AGENTS.md` is kept as is: mdrules only adds a short block pointing to its docs.
 - **The Dashboard** shows each phase with its progress and tasks, and a board of what is in progress,
   blocked and pending.
 
@@ -169,8 +172,8 @@ tick, open questions, and the docs the decision will change. You answer in mdrul
   AI chat. The agent replies to your comments and updates every doc that depends on the decision
   (tasks, phases, architecture…). A proposal is temporary: once applied, it is deleted and the decision
   lives in those docs.
-- In big projects, proposals can be organized **by topic and area** (`docs/proposals/auth/…`,
-  `services/docs/proposals/…`) instead of one folder.
+- In a monorepo, proposals are organized **by project and topic** (`apps/web/docs/proposals/auth/…`);
+  in a big single project they can be organized by topic instead of one folder.
 
 It comes with the mdrules method, and can be turned on or off for any project in **Settings**.
 

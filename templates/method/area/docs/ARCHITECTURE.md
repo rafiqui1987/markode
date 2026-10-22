@@ -6,8 +6,8 @@ updated: {{date}}
 
 # {{area}} · Architecture
 
-Decisions that only affect `{{area}}/`. Decisions shared with other areas live in
-`../docs/architecture/`.
+Decisions that only affect `{{area}}/`. Decisions shared with other projects live in
+`{{up}}docs/architecture/`.
 
 | Topic | Decision | Why |
 |---|---|---|

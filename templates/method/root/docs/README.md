@@ -19,9 +19,10 @@ session (yours or the agent's) can pick up exactly where the last one stopped. T
 | Tasks | `docs/tasks/<ID>-name.md` | One file per task: goal, acceptance checklist, next step, log |
 | Task index | `docs/TASKS.md` | One line per task, grouped by status |
 
-In a monorepo, each area (e.g. `services/`) has the same `docs/ARCHITECTURE.md`, `docs/TASKS.md` and
-`docs/tasks/` for its own work, and its own short `CLAUDE.md`. The root `docs/` holds what crosses
-areas.
+In a monorepo, each project (e.g. `apps/web/`, `services/api/`) has the same `docs/ARCHITECTURE.md`,
+`docs/TASKS.md` and `docs/tasks/` for its own work, and its own short `CLAUDE.md`/`AGENTS.md`. The root
+main doc is the overview: what each project is and where its docs live. The root `docs/` holds what is
+shared by several projects.
 
 ## The cycle
 

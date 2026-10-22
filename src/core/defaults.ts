@@ -1,7 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { GLOBAL_DIR, isLang, type Lang, MAIN_DOCS } from './config.js'
-import type { ProposalLayout } from './proposals.js'
 import type { SddAgent, Workflow } from './sdd.js'
 
 /**
@@ -15,8 +14,11 @@ export interface SetupDefaults {
   workflow: Workflow
   /** Agents that get the OpenSpec or Spec Kit commands (Spec Kit uses the first one). */
   agents: SddAgent[]
-  /** How proposals are organized in big projects (small ones always use one folder). */
-  proposals: ProposalLayout
+  /**
+   * In a monorepo: each project gets its own main doc and docs/ (architecture, tasks, proposals) and the
+   * root main doc is the overview, or a single docs/ at the root holds everything.
+   */
+  monorepo: 'per-project' | 'single'
   /** Used when the project doesn't declare its source language yet. */
   sourceLang: Lang
   rules: string[]
@@ -29,7 +31,7 @@ export const BASE_DEFAULTS: SetupDefaults = {
   mainDoc: 'CLAUDE.md',
   workflow: 'none',
   agents: ['claude'],
-  proposals: 'structured',
+  monorepo: 'per-project',
   sourceLang: 'en',
   rules: [],
   rulesInSubprojects: false,
@@ -44,6 +46,7 @@ export function readDefaults(): SetupDefaults | null {
     const saved = { ...BASE_DEFAULTS, ...JSON.parse(fs.readFileSync(defaultsFile(), 'utf8')) } as SetupDefaults
     if (!isLang(saved.sourceLang)) saved.sourceLang = BASE_DEFAULTS.sourceLang
     if (!MAIN_DOCS.includes(saved.mainDoc)) saved.mainDoc = BASE_DEFAULTS.mainDoc
+    if (saved.monorepo !== 'single') saved.monorepo = 'per-project'
     return saved
   } catch {
     return null

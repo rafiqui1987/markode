@@ -21,7 +21,7 @@ export function proposalsState(root: string): { active: boolean; layout: Proposa
 const WHERE: Record<ProposalLayout, string> = {
   general: '`docs/proposals/NNN-short-name.md` (NNN: the next number in that folder)',
   structured:
-    '`docs/proposals/<topic>/NNN-short-name.md`, one folder per topic (e.g. `sidebar`, `auth`); in a monorepo, a proposal for a single area goes in `<area>/docs/proposals/<topic>/`. Reuse an existing topic folder; ask the user before creating a new one',
+    '`docs/proposals/<topic>/NNN-short-name.md`, one folder per topic (e.g. `sidebar`, `auth`); in a monorepo, a proposal for a single project goes in `<project>/docs/proposals/<topic>/` (e.g. `apps/web/docs/proposals/auth/`). Reuse an existing topic folder; ask the user before creating a new one',
 }
 
 function section(layout: ProposalLayout) {

@@ -71,6 +71,11 @@ const PROPOSAL_OPTIONS: { value: ProposalLayout; label: string; hint: string }[]
   { value: 'structured', label: 'By topic and area', hint: 'docs/proposals/auth/…, services/docs/proposals/…' },
   { value: 'general', label: 'One folder', hint: 'docs/proposals/' },
 ]
+const MONOREPO_QUESTION = 'How should the docs of a monorepo be organized?'
+const MONOREPO_OPTIONS: { value: SetupDefaults['monorepo']; label: string; hint: string }[] = [
+  { value: 'per-project', label: 'One set per project', hint: 'each project: its CLAUDE.md/AGENTS.md, architecture, tasks and proposals; the root main doc is the overview' },
+  { value: 'single', label: 'One docs/ for everything', hint: 'at the root' },
+]
 const SOURCE_LANG_QUESTION = 'Language you work in (every .md file is written in it)'
 const SOURCE_LANG_MARK = /<!-- mdrules:source-lang:\w+ -->/
 const LANG_OPTIONS = LANGS.map((l) => ({ value: l, label: LANG_NAMES[l], hint: l === 'en' ? 'default' : undefined }))
@@ -87,11 +92,14 @@ async function chooseAreas(root: string, d: SetupDefaults | null): Promise<Area[
   if (!candidates.length) return []
   if (d) {
     const used = new Set<string>()
-    return candidates.map((dir) => ({ dir, prefix: suggestPrefix(dir, used) }))
+    return d.monorepo === 'single' ? [] : candidates.map((dir) => ({ dir, prefix: suggestPrefix(dir, used) }))
   }
+  p.log.info(`Monorepo detected: ${candidates.map((c) => `${c}/`).join(', ')}`)
+  const layout = check(await p.select<SetupDefaults['monorepo']>({ message: MONOREPO_QUESTION, options: MONOREPO_OPTIONS }))
+  if (layout === 'single') return []
   const dirs = check(
     await p.multiselect({
-      message: 'Monorepo detected. Which folders are areas with their own docs and tasks? (none: one docs/ for everything)',
+      message: 'Which projects get their own docs?',
       options: candidates.map((d) => ({ value: d, label: `${d}/` })),
       initialValues: candidates,
       required: false,
@@ -100,7 +108,7 @@ async function chooseAreas(root: string, d: SetupDefaults | null): Promise<Area[
   const used = new Set<string>()
   const areas = dirs.map((dir) => ({ dir, prefix: suggestPrefix(dir, used) }))
   if (!areas.length) return areas
-  const ok = check(await p.confirm({ message: `Task prefixes: ${areas.map((a) => `${a.dir} → ${a.prefix}`).join(', ')}, cross-area → CORE. Use them?`, initialValue: true }))
+  const ok = check(await p.confirm({ message: `Task prefixes: ${areas.map((a) => `${a.dir} → ${a.prefix}`).join(', ')}, across projects → CORE. Use them?`, initialValue: true }))
   if (ok) return areas
   for (const a of areas) {
     a.prefix = check(
@@ -128,13 +136,14 @@ async function chooseWorkflow(root: string, mainDoc: string, previous: Workflow 
       const areas = await chooseAreas(root, d)
       const created = scaffoldMethod(root, mainDoc, areas)
       installMethodSkills(root)
-      // Proposals come with the method; how to organize them only matters in a big project.
-      const big = areas.length > 0 || flattenFiles(scanTree(root)).length > 40
-      const layout: ProposalLayout = !big ? 'general' : d ? d.proposals : check(await p.select<ProposalLayout>({ message: PROPOSALS_QUESTION, options: PROPOSAL_OPTIONS }))
+      // Proposals come with the method: per project and topic in a monorepo; a big single project may
+      // still want them by topic.
+      const big = !areas.length && flattenFiles(scanTree(root)).length > 40
+      const layout: ProposalLayout = areas.length ? 'structured' : !big || d ? 'general' : check(await p.select<ProposalLayout>({ message: PROPOSALS_QUESTION, options: PROPOSAL_OPTIONS }))
       activateProposals(root, layout, mainDoc)
       if (created.length) p.log.success(`Created ${created.length} files: ${created.slice(0, 8).join(', ')}${created.length > 8 ? '…' : ''}`)
       p.log.info(`How it works: ${pc.cyan('docs/README.md')}. Skills: /mdrules-new-task, /mdrules-close-session.`)
-      return { workflow: choice, section: methodSection(areas) }
+      return { workflow: choice, section: methodSection(areas, root) }
     }
 
     let official = true
@@ -279,18 +288,18 @@ export async function runSetup(quick = false): Promise<SetupDefaults> {
   )
   const workflow = check(await p.select<Workflow>({ message: 'Base structure for specs and planning', options: WORKFLOW_OPTIONS, initialValue: previous.workflow }))
   let agents = previous.agents
-  let proposals = previous.proposals
+  let monorepo = previous.monorepo
   if (workflow === 'openspec')
     agents = check(await p.multiselect({ message: 'Install the OpenSpec commands for which agents?', options: agentOptions(), initialValues: previous.agents, required: false }))
   if (workflow === 'speckit') agents = [check(await p.select({ message: 'Install the Spec Kit commands for which agent?', options: agentOptions(), initialValue: previous.agents[0] }))]
-  if (workflow === 'mdrules') proposals = check(await p.select<ProposalLayout>({ message: `${PROPOSALS_QUESTION} (big projects and monorepos)`, options: PROPOSAL_OPTIONS, initialValue: previous.proposals }))
+  if (workflow === 'mdrules') monorepo = check(await p.select<SetupDefaults['monorepo']>({ message: MONOREPO_QUESTION, options: MONOREPO_OPTIONS, initialValue: previous.monorepo }))
   const sourceLang = check(await p.select<Lang>({ message: `${SOURCE_LANG_QUESTION}; projects that already declare one keep it`, options: LANG_OPTIONS, initialValue: previous.sourceLang }))
   const rules = listRules()
   const selected = check(await p.multiselect({ message: 'Working rules to apply', options: ruleOptions(rules), initialValues: previous.rules.filter((id) => rules.some((r) => r.id === id)), required: false }))
   const rulesInSubprojects = selected.length ? check(await p.confirm({ message: 'In monorepos, apply the rules to the subprojects too?', initialValue: previous.rulesInSubprojects })) : false
   const hideInVsCode = check(await p.confirm({ message: HIDE_QUESTION, initialValue: previous.hideInVsCode }))
 
-  const d: SetupDefaults = { mode, mainDoc, workflow, agents, proposals, sourceLang, rules: selected, rulesInSubprojects, hideInVsCode }
+  const d: SetupDefaults = { mode, mainDoc, workflow, agents, monorepo, sourceLang, rules: selected, rulesInSubprojects, hideInVsCode }
   writeDefaults(d)
   p.outro(`Saved in ${pc.cyan(defaultsFile())}. Change them with ${pc.cyan('mdrules setup')}; for a single project: ${pc.cyan('mdrules init --custom')}`)
   return d

@@ -2,8 +2,8 @@
 
 ## Contents
 
-<!-- What lives in this folder. -->
+<!-- What this project is, in one or two lines. -->
 
 ## Commands
 
-<!-- How to build, run and test this area. -->
+<!-- How to build, run and test this project. -->
