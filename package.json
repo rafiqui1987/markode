@@ -1,6 +1,6 @@
 {
   "name": "mdrules",
-  "version": "0.2.1",
+  "version": "0.2.3",
   "description": "Visual editor for CLAUDE.md, AGENTS.md and /docs — humans edit comfortably, the AI keeps reading plain Markdown.",
   "keywords": [
     "markdown",
