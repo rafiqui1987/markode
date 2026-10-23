@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { assertInside, stateDir } from './config.js'
+import { CURRENT_VERSION } from './update.js'
 
 /**
  * The editor running for a project: `markode serve` records its port, so `markode url` can hand out
@@ -10,6 +11,8 @@ import { assertInside, stateDir } from './config.js'
 export interface RunningServer {
   port: number
   pid: number
+  /** Missing in records written before 0.4.2. */
+  version?: string
 }
 
 const serverFile = (root: string) => path.join(stateDir(root), 'server.json')
@@ -28,7 +31,7 @@ export function recordServer(root: string, port: number) {
   const file = serverFile(root)
   fs.mkdirSync(path.dirname(file), { recursive: true })
   assertInside(file)
-  fs.writeFileSync(file, JSON.stringify({ port, pid: process.pid }))
+  fs.writeFileSync(file, JSON.stringify({ port, pid: process.pid, version: CURRENT_VERSION }))
   process.once('exit', () => {
     // Another editor may have started for this project since; only remove our own record.
     if (runningServer(root)?.pid === process.pid) fs.rmSync(file, { force: true })
@@ -40,7 +43,7 @@ export function recordServer(root: string, port: number) {
 export function runningServer(root: string): RunningServer | null {
   try {
     const s = JSON.parse(fs.readFileSync(serverFile(root), 'utf8'))
-    return Number.isInteger(s.port) && Number.isInteger(s.pid) && isAlive(s.pid) ? { port: s.port, pid: s.pid } : null
+    return Number.isInteger(s.port) && Number.isInteger(s.pid) && isAlive(s.pid) ? { port: s.port, pid: s.pid, version: s.version } : null
   } catch {
     return null
   }
@@ -57,11 +60,16 @@ async function responds(port: number) {
 
 /**
  * The project's editor, started in the background (it outlives this command) when it isn't running.
- * `cli` is the script that runs markode, so the same version serves it.
+ * `cli` is the script that runs markode, so the same version serves it: an editor of another version is
+ * replaced, since updating markode deletes the files the old one serves.
  */
 export async function ensureServer(root: string, cli: string, port: number): Promise<RunningServer> {
   const running = runningServer(root)
-  if (running && (await responds(running.port))) return running
+  if (running && running.version !== CURRENT_VERSION) {
+    process.kill(running.pid)
+    for (let i = 0; i < 50 && isAlive(running.pid); i++) await new Promise((r) => setTimeout(r, 100))
+    port = running.port
+  } else if (running && (await responds(running.port))) return running
   const child = spawn(process.execPath, [...process.execArgv, cli, 'serve', '--no-open', '--port', String(port)], {
     cwd: root,
     env: { ...process.env, MARKODE_ROOT: root },

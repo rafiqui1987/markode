@@ -211,7 +211,7 @@ async function update() {
   if (!via) return console.log('This copy runs from a clone of the repository: pull and build it, or install it with `markode update --pnpm` (or --npm).')
   const cmd = installCommand(via, latest)
   console.log(`$ ${cmd.join(' ')}`)
-  if (runInstall(cmd)) return console.log(`Updated to ${latest}. A running editor keeps the old version until \`markode stop\`.`)
+  if (runInstall(cmd)) return console.log(`Updated to ${latest}. The next \`markode url\` (or /markode) restarts a running editor with it.`)
   console.error('The install failed; the output above says why.')
   process.exitCode = 1
 }
