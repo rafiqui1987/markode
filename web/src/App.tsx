@@ -162,6 +162,12 @@ export function App() {
       setTick((n) => n + 1)
     }
     const unsubscribe = subscribe((e) => {
+      // A link to a doc clicked elsewhere (`/open`): this tab shows it instead of a new one.
+      if (e.type === 'open') {
+        openRef.current(e.path)
+        window.focus()
+        return
+      }
       // Sync state (state.json) changes the open file's status without touching its content.
       if (e.path === selectedRef.current || e.path.startsWith('.markode/')) setFileTick((n) => n + 1)
       if (e.path === '.markode/config.json') api.info().then(setInfo)
@@ -183,6 +189,15 @@ export function App() {
   useEffect(() => {
     if (selected) history.replaceState(null, '', `#/${encodeURI(selected)}`)
   }, [selected])
+  // A `#/<doc>` link typed or pasted into this tab.
+  useEffect(() => {
+    const onHash = () => {
+      const path = decodeURIComponent(location.hash.slice(2))
+      if (path && path !== selectedRef.current) openRef.current(path)
+    }
+    addEventListener('hashchange', onHash)
+    return () => removeEventListener('hashchange', onHash)
+  }, [])
   useEffect(() => store.set('markode.view', view), [view])
   useEffect(() => store.set('markode.theme', theme ?? ''), [theme])
   useEffect(() => store.set('markode.sidebarWidth', String(sidebarWidth)), [sidebarWidth])
@@ -217,6 +232,8 @@ export function App() {
     setView('editor')
     setMarkdownFile(null)
   }
+  const openRef = useRef(open)
+  openRef.current = open
 
   const setLang = (lang: string) => {
     setStoredLang(lang)

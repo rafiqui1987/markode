@@ -7,6 +7,7 @@ import { BASE_DEFAULTS, readDefaults, writeDefaults } from '../core/defaults.js'
 import { FEATURE_INFO, FEATURES, featureState, isFeature, isProfile, PROFILE_FEATURES, refreshInstalled, REQUIRES, setFeature } from '../core/features.js'
 import { keepLanguage, markSynced, syncReport } from '../core/i18n.js'
 import { linkMainDocs, missingMainDocs } from '../core/scaffold.js'
+import { editorUrl, ensureServer, runningServer } from '../core/server.js'
 import { answerSummary, waitForAnswer } from '../core/wait.js'
 import { startServer } from '../server/index.js'
 import { askFeatures, type InitPlan, runInit, runSetup } from './init.js'
@@ -21,6 +22,8 @@ Usage
   markode features        list the modules and whether they are on in this project
   markode features <module> on|off   turn a module on or off (same as Settings → Features)
   markode serve           open the editor without running init
+  markode url [<doc.md>]  the editor's link (or a doc's), starting it in the background if it isn't running
+  markode stop            stop the editor running in the background for this project
   markode translate       choose languages to review the docs in (or: markode --translate)
   markode check [--json]  what /markode sync fixes: answered proposals, phases vs tasks, projects table, broken links
   markode wait <proposal> wait until the user answers a proposal in markode, then print the answer
@@ -69,6 +72,8 @@ async function main() {
   if (command === 'wait') return wait()
   if (command === 'link') return link()
   if (command === 'changes') return changes()
+  if (command === 'url') return url()
+  if (command === 'stop') return stop()
   if (command === 'features') return features()
   if (command === 'setup') {
     await runSetup(false, flag('--custom'))
@@ -167,6 +172,25 @@ function link() {
   if (!missing.length) return console.log('Every main doc has its CLAUDE.md and AGENTS.md (or neither).')
   if (flag('--dry-run')) return console.log(missing.map((m) => `would create ${m.path} → ${m.pointsTo}`).join('\n'))
   for (const p of linkMainDocs(root)) console.log(`created ${p}`)
+}
+
+/** For the agent's `/markode`: a link the user clicks in the terminal; `/open` reuses the markode tab. */
+async function url() {
+  const doc = args[1] && !args[1].startsWith('-') ? args[1] : undefined
+  if (doc && (!doc.toLowerCase().endsWith('.md') || !fs.existsSync(path.join(root, doc)))) {
+    console.error(`Usage: markode url [<doc.md>] (relative to ${root})`)
+    process.exitCode = 1
+    return
+  }
+  const { port } = await ensureServer(root, process.argv[1], Number(option('--port') ?? 4319))
+  console.log(editorUrl(port, doc))
+}
+
+function stop() {
+  const running = runningServer(root)
+  if (!running) return console.log('The editor is not running for this project.')
+  process.kill(running.pid)
+  console.log(`Stopped the editor on port ${running.port}.`)
 }
 
 function changes() {

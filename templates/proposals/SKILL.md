@@ -21,7 +21,8 @@ After writing the file:
    answer" in markode, then prints their answer: choices, open questions, comments waiting for a reply,
    affected docs and your "After your answer" list. If you can't run background commands, skip it: the
    user will tell you, or the next `/markode sync` finds the answered proposal.
-3. Tell the user the path in one line and that you will continue when they answer. Meanwhile, keep
+3. Tell the user in one line where it is, as a link to it in markode (see "Links to docs" in the markode
+   skill), and that you will continue when they answer. Meanwhile, keep
    working on anything that doesn't depend on the decision.
 
 When the watcher's output arrives, go straight to "When the user answers". Once applied, the decision

@@ -1,11 +1,28 @@
 ---
 name: markode
-description: Conventions for every .md file in this project (CLAUDE.md, AGENTS.md, docs/), keeping the docs consistent (/markode sync) and translating them (/markode translate). Use when creating or editing any .md file, at the start and end of a session, or when the user runs /markode sync or /markode translate.
+description: Conventions for every .md file in this project (CLAUDE.md, AGENTS.md, docs/), opening the editor (/markode), linking docs in your answers, keeping the docs consistent (/markode sync) and translating them (/markode translate). Use when creating or editing any .md file, when you mention a .md file to the user, at the start and end of a session, or when the user runs /markode, /markode sync or /markode translate.
 ---
 
 # markode
 
 The user reads and edits this project's Markdown in **markode**, a visual editor. Write `.md` files so it can present them well.
+
+## Opening the editor (`/markode`)
+
+When the user runs `/markode` with nothing after it, run `markode url` (use `pnpm exec markode` if it is
+a local dependency). It starts the editor in the background when it isn't running for this project and
+prints its link; answer with that link in one line. `markode stop` stops it.
+
+## Links to docs
+
+When you point the user to a `.md` file (a proposal you wrote, a doc you changed or cite), give a link
+they can click in the terminal: `[docs/proposals/003-auth.md](http://localhost:4319/open?path=docs/proposals/003-auth.md)`.
+
+- Get the link with `markode url <path>` (it starts the editor if needed); once you know the port, build
+  the next ones the same way, without running it again.
+- `/open` shows the doc in the markode tab the user already has open, and the tab the click opened
+  closes itself. Never link to `/#/<path>`: that opens a new editor tab each time.
+- Code and other files keep `path:line` references, which open in the user's code editor.
 
 ## Language
 

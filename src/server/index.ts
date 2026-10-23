@@ -1,3 +1,4 @@
+import crypto from 'node:crypto'
 import fs from 'node:fs'
 import http from 'node:http'
 import path from 'node:path'
@@ -16,6 +17,7 @@ import { sddPrefixes, summarizeSdd } from '../core/sdd.js'
 import { linkMainDocs, missingMainDocs } from '../core/scaffold.js'
 import { waitingOn } from '../core/wait.js'
 import { logSave } from '../core/changes.js'
+import { recordServer } from '../core/server.js'
 import { BASE_DEFAULTS, readDefaults } from '../core/defaults.js'
 import { FEATURES, featureState, isFeature, setFeature } from '../core/features.js'
 import { getSkill, installSkill, listSkills, PROJECT_TARGETS, type ProjectTarget, projectTargets, setSkillTags, skillSources } from '../core/skills.js'
@@ -311,6 +313,7 @@ export async function startServer({ root, port, open: openBrowser }: Options) {
       return
     }
     if (req.method === 'GET' && url.pathname === '/api/asset') return serveAsset(url.searchParams.get('path') ?? '', res)
+    if (req.method === 'GET' && url.pathname === '/open') return openDoc(url.searchParams.get('path') ?? '', res)
     serveStatic(url.pathname, res)
   })
 
@@ -331,6 +334,31 @@ export async function startServer({ root, port, open: openBrowser }: Options) {
     // Opened directly (not as <img>), an SVG with a script would run on this origin and reach the API.
     res.writeHead(200, { 'content-type': type, 'cache-control': 'no-cache', 'content-security-policy': "sandbox; frame-ancestors 'none'" })
     fs.createReadStream(file).pipe(res)
+  }
+
+  /**
+   * A link to a doc (`markode url <doc>`, clicked in the terminal): the markode tab already open shows
+   * it, and the tab the link opened closes itself. With no tab open, this one becomes the editor.
+   */
+  function openDoc(rel: string, res: http.ServerResponse) {
+    let doc: string
+    try {
+      doc = mdPath(rel)
+    } catch {
+      res.writeHead(400).end('Expected a .md path')
+      return
+    }
+    const hash = `/#/${encodeURI(doc)}`
+    if (!wss.clients.size) {
+      res.writeHead(302, { location: hash }).end()
+      return
+    }
+    broadcast({ type: 'open', path: doc })
+    const text = OPENED_TEXT[readSettings().uiLang] ?? OPENED_TEXT.en
+    const page = `<!doctype html><meta charset="utf-8"><title>markode</title><body style="font:15px system-ui;padding:2rem;color-scheme:light dark">
+<p>${text.shown}</p><p><a href="${hash}">${text.here}</a></p><script>window.close()</script>`
+    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'content-security-policy': "frame-ancestors 'none'; script-src 'sha256-" + CLOSE_HASH + "'" })
+    res.end(page)
   }
 
   // Listen before attaching the WebSocket server: it re-emits EADDRINUSE and would crash the port fallback.
@@ -365,11 +393,20 @@ export async function startServer({ root, port, open: openBrowser }: Options) {
       broadcast({ type: 'fs', event, path: rel })
     })
 
+  recordServer(root, actualPort)
   const url = `http://localhost:${actualPort}`
   console.log(`\n  ${pc.bold('markode')} ${pc.dim('→')} ${pc.cyan(url)}  ${pc.dim(root)}\n`)
   if (!fs.existsSync(WEB_DIR)) console.log(pc.yellow('  Web UI not built: run `pnpm build`, or `pnpm dev` and open http://localhost:4320\n'))
   else if (openBrowser) open(url).catch(() => {})
 }
+
+/** The page `/open` leaves when its tab can't close itself; the doc is already shown in the markode tab. */
+const OPENED_TEXT: Record<string, { shown: string; here: string }> = {
+  en: { shown: 'Opened in your markode tab. You can close this one.', here: 'Open it here instead' },
+  es: { shown: 'Abierto en tu pestaña de markode. Puedes cerrar esta.', here: 'Abrirlo aquí' },
+  fr: { shown: 'Ouvert dans ton onglet markode. Tu peux fermer celui-ci.', here: 'L’ouvrir ici' },
+}
+const CLOSE_HASH = crypto.createHash('sha256').update('window.close()').digest('base64')
 
 function listen(server: http.Server, port: number): Promise<number> {
   return new Promise((resolve, reject) => {

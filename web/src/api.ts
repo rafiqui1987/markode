@@ -179,8 +179,8 @@ export const api = {
   installSkill: (key: string, targets: ProjectTarget[], overwrite: boolean) => call('POST', '/api/skills/install', { key, targets, overwrite }),
 }
 
-/** Live file-system events from the server; reconnects on drop. */
-export function subscribe(onEvent: (e: { event: string; path: string }) => void) {
+/** Live file-system events from the server, and docs to show (`open`); reconnects on drop. */
+export function subscribe(onEvent: (e: { type: 'fs' | 'open'; event?: string; path: string }) => void) {
   let ws: WebSocket
   let closed = false
   const connect = () => {

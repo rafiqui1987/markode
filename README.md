@@ -369,6 +369,8 @@ missing description, a name that doesn't match its folder…).
 markode                     # set up the project if needed, then open the editor
 markode serve               # open the editor without the setup
 markode serve --port 5000 --no-open
+markode url [<doc.md>]      # the editor's link (or a doc's); starts it in the background if needed
+markode stop                # stop the editor started in the background
 markode init                # run the setup again: only adds modules (your defaults, if saved)
 markode init --profile full # no questions: viewer, agent or full
 markode init --yes          # no questions: your defaults, or viewer + AI agent
@@ -390,10 +392,11 @@ Installing it also makes the Claude Code hooks faster than running through `npx`
 
 The AI agent module installs the `markode` skill where the project's agents read skills
 (`.claude/skills/` for Claude Code, `.agents/skills/` for Codex, Copilot, Gemini and others). It tells
-the agent how to write Markdown that markode presents well, and gives it two commands:
+the agent how to write Markdown that markode presents well, and gives it three commands:
 
 | Command | What the agent does | When |
 |---|---|---|
+| `/markode` | Starts the editor in the background if it isn't running and gives you its link (`markode url`) | When you want to open markode |
 | `/markode sync` | Keeps the docs consistent: applies answered proposals, ticks phases from their tasks, checks the projects table and broken links (`markode check`) | Start and end of a session, after editing docs |
 | `/markode translate` | Translates what is behind; asks before changing any source file | Only when you ask |
 
@@ -403,6 +406,11 @@ enough. In the main doc it writes only between its markers:
 - `markode:rules`: the source language and the working rules you picked;
 - `markode:workflow`: how the project plans its work (the markode method, OpenSpec or Spec Kit);
 - `markode:proposals`: how the agent writes proposals and answers comments.
+
+**Links to docs.** When the agent points you to a doc (a proposal it wrote, a doc it changed), it gives
+a link you can click in the terminal: `http://localhost:4319/open?path=docs/proposals/003-auth.md`. The
+markode tab you already have open shows that doc, and the tab the click opened closes itself, so you
+keep a single markode tab. With no markode tab open, the link opens the editor on that doc.
 
 When the agent writes a proposal, it runs `markode wait <proposal>` in the background: it waits
 without using tokens until you press "Done, send my answer", then hands the agent your choices, open
@@ -426,6 +434,7 @@ module, in projects that use Claude Code, markode adds three hooks to `.claude/s
 Without a global install the command is `npx -y --prefer-offline @rafiqui987/markode`.
 
 ```bash
+markode url [<doc.md>]                                # link to the editor or a doc (starts it if needed)
 markode check [--json]                                # what /markode sync fixes
 markode wait <proposal.md>                            # wait for the user's answer, then print it
 markode changes [--json]                              # the user's edits and comments since last told
