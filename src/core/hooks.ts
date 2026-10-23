@@ -1,6 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { PKG_ROOT } from './config.js'
+import { assertInside, PKG_ROOT } from './config.js'
 
 /**
  * Claude Code hooks that tell the agent about the user's edits and comments while it works: a session
@@ -60,6 +60,7 @@ function writeHooks(root: string, name: string, add: boolean): boolean {
   }
   if (!Object.keys(settings.hooks).length) delete settings.hooks
   // A file that only held markode's hooks goes with them.
+  assertInside(settingsFile(root, name))
   if (!Object.keys(settings).length) return fs.rmSync(settingsFile(root, name), { force: true }), true
   fs.mkdirSync(path.dirname(settingsFile(root, name)), { recursive: true })
   fs.writeFileSync(settingsFile(root, name), JSON.stringify(settings, null, 2) + '\n')

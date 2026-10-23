@@ -1,7 +1,8 @@
 import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
-import { type ProjectConfig, TEMPLATES_DIR, toPosix } from './config.js'
+import { assertInside, type ProjectConfig, TEMPLATES_DIR, toPosix } from './config.js'
 import { copyTree } from './scaffold.js'
 import { flattenFiles, scanTree, setIgnored } from './scan.js'
 
@@ -32,7 +33,8 @@ export function detectWorkflow(root: string): Workflow | null {
   return null
 }
 
-const has = (cmd: string) => spawnSync(cmd, ['--version'], { stdio: 'ignore', shell: process.platform === 'win32' }).status === 0
+// From a neutral folder: on Windows the shell looks for a bare command in the current folder first.
+const has = (cmd: string) => spawnSync(cmd, ['--version'], { cwd: os.homedir(), stdio: 'ignore', shell: process.platform === 'win32' }).status === 0
 export const hasUv = () => has('uvx')
 
 /** How to run each tool's official installer, or null when its runtime is missing. */
@@ -121,6 +123,7 @@ export function applyWorkflowToFile(file: string, workflow: Workflow, text?: str
 export function writeManagedBlock(file: string, body: string | null, top = false, name = 'workflow') {
   const START = `<!-- markode:${name}:start -->`
   const END = `<!-- markode:${name}:end -->`
+  assertInside(file)
   const text = fs.readFileSync(file, 'utf8')
   const s = text.indexOf(START)
   const e = text.indexOf(END)
@@ -183,7 +186,7 @@ const read = (abs: string) => {
   }
 }
 
-const progress = (text: string | null): Progress => ({ done: text?.match(/^\s*[-*+] \[[xX]\]/gm)?.length ?? 0, total: text?.match(/^\s*[-*+] \[[ xX]\]/gm)?.length ?? 0 })
+const progress = (text: string | null): Progress => ({ done: text?.match(/^[ \t]*[-*+] \[[xX]\]/gm)?.length ?? 0, total: text?.match(/^[ \t]*[-*+] \[[ xX]\]/gm)?.length ?? 0 })
 const heading = (text: string | null) => text?.match(/^#\s+(.+)$/m)?.[1].trim() ?? null
 
 /** Count spec files anywhere under a change's specs/ folder. */

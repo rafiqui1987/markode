@@ -1,7 +1,7 @@
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
-import { type Lang, langName, readConfig, stateDir } from './config.js'
+import { assertInside, type Lang, langName, readConfig, stateDir } from './config.js'
 import { detectLang } from './langdetect.js'
 import { projectSourceLang } from './rules.js'
 import { flattenFiles, scanTree } from './scan.js'
@@ -45,6 +45,7 @@ function readState(root: string): State {
 
 function writeState(root: string, state: State) {
   fs.mkdirSync(stateDir(root), { recursive: true })
+  assertInside(stateFile(root))
   fs.writeFileSync(stateFile(root), JSON.stringify(state, null, 2) + '\n')
 }
 

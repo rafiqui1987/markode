@@ -1,9 +1,9 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { contentDoc, type Lang, MAIN_DOCS, mainDocOf, type ProjectConfig, readConfig, stateDir, TEMPLATES_DIR, writeConfig } from './config.js'
+import { assertInside, contentDoc, type Lang, MAIN_DOCS, mainDocOf, type ProjectConfig, readConfig, stateDir, TEMPLATES_DIR, writeConfig } from './config.js'
 import { hasClaudeHooks, installClaudeHooks, removeClaudeHooks } from './hooks.js'
 import { detectLang } from './langdetect.js'
-import { setupMethod } from './method.js'
+import { installMethodSkills, setupMethod } from './method.js'
 import { activateProposals, deactivateProposals, proposalsState } from './proposals.js'
 import { appliedRuleIds, applyRulesToFile, sourceLangOf } from './rules.js'
 import { createMainDoc, hideInVsCode, isHiddenInVsCode, showInVsCode } from './scaffold.js'
@@ -119,6 +119,7 @@ export function installAgentSkill(root: string) {
     const dir = path.join(root, PROJECT_TARGETS[target], SKILL)
     fs.mkdirSync(dir, { recursive: true })
     const dest = path.join(dir, 'SKILL.md')
+    assertInside(dest)
     const text = fs.readFileSync(src, 'utf8')
     if (!fs.existsSync(dest) || fs.readFileSync(dest, 'utf8') !== text) fs.writeFileSync(dest, text)
   }
@@ -178,7 +179,7 @@ function apply(root: string, feature: Feature, on: boolean, opts: FeatureOptions
         const doc = mainDocOf(root)
         const c = readConfig(root)
         if (doc && c) writeConfig(root, { ...c, savedSourceLang: sourceLangOf(fs.readFileSync(path.join(root, doc), 'utf8')) })
-        for (const d of skillDirs(root)) fs.rmSync(d, { recursive: true, force: true })
+        for (const d of skillDirs(root)) if (fs.existsSync(d)) assertInside(d), fs.rmSync(d, { recursive: true, force: true })
         for (const doc of allMainDocs(root)) writeManagedBlock(doc, null, false, 'rules')
       }
       return
@@ -221,7 +222,11 @@ function apply(root: string, feature: Feature, on: boolean, opts: FeatureOptions
         writeConfig(root, { ...c, workflow: 'markode' })
       }
       if (!on && readConfig(root)?.workflow === 'markode') {
-        for (const name of METHOD_SKILLS()) for (const t of Object.values(PROJECT_TARGETS)) fs.rmSync(path.join(root, t, name), { recursive: true, force: true })
+        for (const name of METHOD_SKILLS())
+          for (const t of Object.values(PROJECT_TARGETS)) {
+            const dir = path.join(root, t, name)
+            if (fs.existsSync(dir)) assertInside(dir), fs.rmSync(dir, { recursive: true, force: true })
+          }
         for (const doc of allMainDocs(root)) writeManagedBlock(doc, null, false, 'workflow')
         const c = readConfig(root)!
         writeConfig(root, { ...c, workflow: 'none' })
@@ -247,16 +252,14 @@ export function refreshInstalled(root: string) {
   installAgentSkill(root)
   const proposals = proposalsState(root)
   if (proposals.active) activateProposals(root, proposals.layout, mainDocOf(root))
-  if (readConfig(root)?.workflow === 'markode') {
-    const src = path.join(TEMPLATES_DIR, 'method', 'skills')
-    for (const name of METHOD_SKILLS()) if (fs.existsSync(path.join(root, '.claude', 'skills', name))) fs.cpSync(path.join(src, name), path.join(root, '.claude', 'skills', name), { recursive: true })
-  }
+  if (readConfig(root)?.workflow === 'markode') installMethodSkills(root)
 }
 
 /** Keep markode's own folder (config, translations, activity log) out of git without touching .gitignore. */
 export function ignoreStateDir(root: string) {
   const file = path.join(stateDir(root), '.gitignore')
   if (fs.existsSync(file)) return
+  assertInside(file)
   fs.mkdirSync(stateDir(root), { recursive: true })
   fs.writeFileSync(file, '# markode\'s personal state: never committed\n*\n')
 }

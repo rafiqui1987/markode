@@ -12,12 +12,28 @@ const STOPWORDS: Record<Lang, string[]> = {
 
 const SETS = Object.fromEntries(Object.entries(STOPWORDS).map(([l, w]) => [l, new Set(w)])) as Record<Lang, Set<string>>
 
+/**
+ * `text` without what lies between `open` and `close` (an unclosed one is kept). Found with indexOf: a
+ * lazy regex up to the closing mark is quadratic on a file with many unclosed ones.
+ */
+function cut(text: string, open: string, close: string): string {
+  let out = ''
+  let i = 0
+  for (;;) {
+    const s = text.indexOf(open, i)
+    const e = s < 0 ? -1 : text.indexOf(close, s + open.length)
+    if (e < 0) return out + text.slice(i)
+    out += text.slice(i, s) + ' '
+    i = e + close.length
+  }
+}
+
+/** Enough text to tell the language; a huge file is not read to the end. */
+const SAMPLE = 200_000
+
 /** Human prose only: drop frontmatter, code, comments, links targets and table syntax. */
 function prose(md: string): string {
-  return md
-    .replace(/^---\r?\n[\s\S]*?\r?\n---/, ' ')
-    .replace(/```[\s\S]*?```/g, ' ')
-    .replace(/<!--[\s\S]*?-->/g, ' ')
+  return cut(cut(md.slice(0, SAMPLE).replace(/^---\r?\n[\s\S]*?\r?\n---/, ' '), '```', '```'), '<!--', '-->')
     .replace(/`[^`]*`/g, ' ')
     .replace(/\]\([^)]*\)/g, ' ')
     .replace(/https?:\/\/\S+/g, ' ')

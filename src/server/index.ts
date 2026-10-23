@@ -5,7 +5,7 @@ import { watch } from 'chokidar'
 import open from 'open'
 import pc from 'picocolors'
 import { WebSocketServer } from 'ws'
-import { isLang, isLangCode, type Lang, langName, readConfig, readSettings, safeResolve, stateDir, toPosix, WEB_DIR, writeConfig, writeSettings } from '../core/config.js'
+import { assertInside, isLang, isLangCode, type Lang, langName, readConfig, readSettings, safeResolve, stateDir, toPosix, WEB_DIR, writeConfig, writeSettings } from '../core/config.js'
 import { summarize } from '../core/dashboard.js'
 import { gitDiff, gitStatuses, isGitRepo } from '../core/git.js'
 import { allStatuses, fileStatus, foreignFiles, keepLanguage, syncReport, translationPath } from '../core/i18n.js'
@@ -57,9 +57,15 @@ class HttpError extends Error {
   }
 }
 
+/** Bodies are docs and settings: a few MB at most. */
+const MAX_BODY = 20 * 1024 * 1024
+
 async function readBody(req: http.IncomingMessage): Promise<any> {
   let data = ''
-  for await (const chunk of req) data += chunk
+  for await (const chunk of req) {
+    data += chunk
+    if (data.length > MAX_BODY) throw new HttpError(413, 'Request too large')
+  }
   if (!data) return {}
   // Browsers only send JSON cross-site after a CORS preflight, which this server never grants.
   if (!req.headers['content-type']?.startsWith('application/json')) throw new HttpError(415, 'Expected application/json')
@@ -69,13 +75,17 @@ async function readBody(req: http.IncomingMessage): Promise<any> {
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]'])
 
 /**
- * Only this app may talk to the server: the Host must be local (blocks DNS rebinding) and an Origin,
- * when sent, must be this same host (blocks other web pages, which could otherwise create files).
+ * Only this app may talk to the server: the Host must be local (blocks DNS rebinding), an Origin, when
+ * sent, must be this same host (blocks other web pages, which could otherwise create files), and the
+ * browser must not mark the request as coming from another site (an `<img>` on any page sends no
+ * Origin, and would otherwise tell that page which files the project has).
  */
 function isLocalRequest(req: http.IncomingMessage): boolean {
   const host = req.headers.host ?? ''
   try {
     if (!LOCAL_HOSTS.has(new URL(`http://${host}`).hostname)) return false
+    const site = req.headers['sec-fetch-site']
+    if (site && site !== 'same-origin' && site !== 'none') return false
     return !req.headers.origin || new URL(req.headers.origin).host === host
   } catch {
     return false
@@ -103,6 +113,13 @@ export async function startServer({ root, port, open: openBrowser }: Options) {
     if (abs === root) throw new HttpError(400, 'Refusing to delete the project root')
     if (!fs.existsSync(abs)) throw new HttpError(404, 'Not found')
     return abs
+  }
+
+  /** A translation file, which lives in .markode/: the same symlink check as the project's files. */
+  const translationFile = (lang: string, rel: string) => {
+    const file = translationPath(root, lang, rel)
+    assertInside(file, root)
+    return file
   }
 
   const routes: Record<string, (url: URL, body: any) => unknown> = {
@@ -171,7 +188,7 @@ export async function startServer({ root, port, open: openBrowser }: Options) {
       const l = viewLang(url.searchParams.get('lang'))
       const source = fs.readFileSync(safeResolve(root, rel), 'utf8')
       if (l) {
-        const tPath = translationPath(root, l, rel)
+        const tPath = translationFile(l, rel)
         if (fs.existsSync(tPath)) return { path: rel, content: fs.readFileSync(tPath, 'utf8'), target: 'translation', status: fileStatus(root, l, rel) }
         return { path: rel, content: source, target: 'source', status: 'missing' }
       }
@@ -180,7 +197,7 @@ export async function startServer({ root, port, open: openBrowser }: Options) {
     'PUT /api/file': (_, body) => {
       const rel = mdPath(body.path)
       const l = viewLang(body.lang)
-      const file = body.target === 'translation' && l ? translationPath(root, l, rel) : safeResolve(root, rel)
+      const file = body.target === 'translation' && l ? translationFile(l, rel) : safeResolve(root, rel)
       fs.mkdirSync(path.dirname(file), { recursive: true })
       const content = String(body.content ?? '')
       // Edits and comments to the source docs are news for an agent at work (`markode changes`).
@@ -216,10 +233,12 @@ export async function startServer({ root, port, open: openBrowser }: Options) {
       const rel = toPosix(path.relative(root, deletable(url.searchParams.get('path'))))
       fs.rmSync(safeResolve(root, rel), { recursive: true })
       // Their translations would be orphaned.
-      for (const l of config().langs) fs.rmSync(translationPath(root, l, rel), { recursive: true, force: true })
+      for (const l of config().langs) fs.rmSync(translationFile(l, rel), { recursive: true, force: true })
       return { ok: true }
     },
     'POST /api/ignore': (_, body) => {
+      // One line of .markodeignore per path: a line break would add rules of its own.
+      if (typeof body.path !== 'string' || /[\r\n]/.test(body.path)) throw new HttpError(400, 'Expected a path')
       safeResolve(root, body.path)
       setIgnored(root, body.path, body.kind === 'dir' ? 'dir' : 'file', !!body.ignored)
       return { ok: true }
@@ -272,6 +291,9 @@ export async function startServer({ root, port, open: openBrowser }: Options) {
   }
 
   const server = http.createServer(async (req, res) => {
+    // Never inside another site's frame (clickjacking: a page overlaying the UI to trick clicks).
+    res.setHeader('X-Frame-Options', 'DENY')
+    res.setHeader('X-Content-Type-Options', 'nosniff')
     if (!isLocalRequest(req)) {
       res.writeHead(403).end('Forbidden')
       return
@@ -307,7 +329,7 @@ export async function startServer({ root, port, open: openBrowser }: Options) {
       return
     }
     // Opened directly (not as <img>), an SVG with a script would run on this origin and reach the API.
-    res.writeHead(200, { 'content-type': type, 'cache-control': 'no-cache', 'content-security-policy': 'sandbox', 'x-content-type-options': 'nosniff' })
+    res.writeHead(200, { 'content-type': type, 'cache-control': 'no-cache', 'content-security-policy': "sandbox; frame-ancestors 'none'" })
     fs.createReadStream(file).pipe(res)
   }
 
@@ -366,6 +388,6 @@ function serveStatic(pathname: string, res: http.ServerResponse) {
     res.writeHead(404).end('Web UI not built. Run `pnpm build`.')
     return
   }
-  res.writeHead(200, { 'content-type': MIME[path.extname(file)] ?? 'application/octet-stream' })
+  res.writeHead(200, { 'content-type': MIME[path.extname(file)] ?? 'application/octet-stream', 'content-security-policy': "frame-ancestors 'none'" })
   fs.createReadStream(file).pipe(res)
 }

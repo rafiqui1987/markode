@@ -1,11 +1,12 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import YAML from 'yaml'
-import { contentDoc, linkAgentsDoc, TEMPLATES_DIR } from './config.js'
+import { assertInside, contentDoc, linkAgentsDoc, TEMPLATES_DIR } from './config.js'
 import { contractsGuidance, detectProfile, existingDocs, findContracts, guessKind, KIND_LABEL, kindGuidance, looksLikeMicroservices, type Profile } from './profile.js'
 import { copyTree, fill, today } from './scaffold.js'
 import { findSubprojects, scanTree } from './scan.js'
 import { applyWorkflowToFile, writeManagedBlock } from './sdd.js'
+import { PROJECT_TARGETS, projectTargets } from './skills.js'
 
 /**
  * The markode method: a short main doc that points to docs/ (vision, architecture, phases, one file per
@@ -133,6 +134,7 @@ export function scaffoldMethod(root: string, mainDoc: string, areas: Area[]): st
     let doc = contentDoc(dir)
     if (!doc) {
       doc = path.join(dir, mainDoc)
+      assertInside(doc)
       fs.writeFileSync(doc, fill(fs.readFileSync(path.join(TEMPLATES_DIR, 'method', 'area-main.md'), 'utf8'), vars))
       created.push(path.posix.join(a.dir, mainDoc))
     }
@@ -224,10 +226,18 @@ export function methodSection(areas: Area[], root?: string, ctx: MethodContext =
   ].join('\n')
 }
 
-/** The method's procedures as skills (with their templates): docs, new task, status and closing a session. */
+/**
+ * The method's procedures as skills (with their templates): docs, new task, status and closing a session.
+ * Installed where the project's agents read skills: Claude Code's folder and/or the shared `.agents/`.
+ */
 export function installMethodSkills(root: string) {
   const src = path.join(TEMPLATES_DIR, 'method', 'skills')
-  for (const name of fs.readdirSync(src)) fs.cpSync(path.join(src, name), path.join(root, '.claude', 'skills', name), { recursive: true })
+  for (const target of projectTargets(root))
+    for (const name of fs.readdirSync(src)) {
+      const dest = path.join(root, PROJECT_TARGETS[target], name)
+      assertInside(dest)
+      fs.cpSync(path.join(src, name), dest, { recursive: true })
+    }
 }
 
 /**

@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import YAML from 'yaml'
-import { GLOBAL_DIR } from './config.js'
+import { assertInside, GLOBAL_DIR } from './config.js'
 
 /**
  * Global skills of every agent that follows the Agent Skills standard (agentskills.io):
@@ -199,6 +199,7 @@ export function installSkill(root: string, skill: Skill, targets: ProjectTarget[
   const existing = dests.filter((d) => fs.existsSync(d))
   if (existing.length && !overwrite) return { conflict: existing.map((d) => path.relative(root, d).split(path.sep).join('/')) }
   for (const dest of dests) {
+    assertInside(dest, root)
     fs.rmSync(dest, { recursive: true, force: true })
     fs.mkdirSync(path.dirname(dest), { recursive: true })
     fs.cpSync(skill.key, dest, { recursive: true, dereference: true })

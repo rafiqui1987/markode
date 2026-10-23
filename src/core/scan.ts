@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import ignore, { type Ignore } from 'ignore'
-import { MAIN_DOCS, toPosix } from './config.js'
+import { assertInside, MAIN_DOCS, toPosix } from './config.js'
 
 export interface TreeNode {
   name: string
@@ -43,6 +43,7 @@ export function setIgnored(root: string, rel: string, kind: 'dir' | 'file', igno
   const entry = kind === 'dir' ? `${rel}/` : rel
   const lines = readIgnoreList(root).filter((l) => l !== entry && l !== rel)
   if (ignored) lines.push(entry)
+  assertInside(path.join(root, IGNORE_FILE))
   fs.writeFileSync(path.join(root, IGNORE_FILE), lines.length ? lines.join('\n') + '\n' : '')
 }
 

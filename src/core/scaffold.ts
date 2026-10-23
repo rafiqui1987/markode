@@ -1,6 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { linkMainDoc, type MainDoc, missingMainDoc, TEMPLATES_DIR, toPosix } from './config.js'
+import { assertInside, linkMainDoc, type MainDoc, missingMainDoc, TEMPLATES_DIR, toPosix } from './config.js'
 import { findSubprojects, scanTree } from './scan.js'
 
 export const today = () => new Date().toISOString().slice(0, 10)
@@ -14,6 +14,7 @@ export function copyTree(src: string, dest: string, vars: Record<string, string>
     const from = path.join(src, e.name)
     // Names can hold variables too, e.g. `{{prefix}}-001-set-up.md`.
     const to = path.join(dest, fill(e.name, vars))
+    assertInside(to)
     if (e.isDirectory()) {
       fs.mkdirSync(to, { recursive: true })
       copyTree(from, to, vars, created, root)
@@ -28,6 +29,7 @@ export function copyTree(src: string, dest: string, vars: Record<string, string>
 export function createMainDoc(root: string, name: string) {
   const file = path.join(root, name)
   if (fs.existsSync(file)) return
+  assertInside(file)
   const text = fs.readFileSync(path.join(TEMPLATES_DIR, 'main.md'), 'utf8')
   fs.writeFileSync(file, fill(text, { name: path.basename(root), date: today() }))
 }
@@ -51,6 +53,7 @@ export const isHiddenInVsCode = (root: string) => readVsCode(root)?.['files.excl
 export function hideInVsCode(root: string) {
   const settings = readVsCode(root)
   if (!settings) return false
+  assertInside(vsCodeFile(root))
   settings['files.exclude'] = { ...(settings['files.exclude'] ?? {}), [HIDDEN]: true }
   fs.mkdirSync(path.dirname(vsCodeFile(root)), { recursive: true })
   fs.writeFileSync(vsCodeFile(root), JSON.stringify(settings, null, 2) + '\n')
@@ -62,6 +65,7 @@ export function showInVsCode(root: string) {
   if (!settings?.['files.exclude']?.[HIDDEN]) return
   delete settings['files.exclude'][HIDDEN]
   if (!Object.keys(settings['files.exclude']).length) delete settings['files.exclude']
+  assertInside(vsCodeFile(root))
   fs.writeFileSync(vsCodeFile(root), JSON.stringify(settings, null, 2) + '\n')
 }
 

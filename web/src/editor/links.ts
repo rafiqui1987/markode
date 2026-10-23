@@ -37,7 +37,11 @@ function linkAt(state: EditorState, pos: number): LinkAt | null {
 function projectPath(url: string, from: string) {
   if (/^[a-z][\w+.-]*:/i.test(url) || url.startsWith('#')) return null
   const parts = url.startsWith('/') ? [] : from.split('/').slice(0, -1)
-  for (const seg of decodeURI(url.split('#')[0]).split('/')) {
+  let target = url.split('#')[0]
+  try {
+    target = decodeURI(target)
+  } catch {} // a malformed escape: the link is used as written
+  for (const seg of target.split('/')) {
     if (seg === '..') parts.pop()
     else if (seg && seg !== '.') parts.push(seg)
   }
@@ -46,7 +50,8 @@ function projectPath(url: string, from: string) {
 
 function follow(view: EditorView, url: string) {
   const path = projectPath(url, view.state.facet(docPath))
-  if (path === null) return void (url.startsWith('#') || window.open(url, '_blank', 'noopener'))
+  // Only web and mail links leave markode: `javascript:`, `data:` or `file:` from a doc never run.
+  if (path === null) return void (/^(https?|mailto):/i.test(url) && window.open(url, '_blank', 'noopener,noreferrer'))
   const open = view.state.facet(openDoc)
   if (open && /\.md$/i.test(path)) open(path)
 }

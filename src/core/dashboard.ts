@@ -39,8 +39,8 @@ export function summarize(root: string): DocSummary[] {
     // The task template (`_TEMPLATE.md`) is not a task.
     if (meta.type === 'task' && f.name.startsWith('_')) return []
     const id = asText(meta.id)
-    const total = text.match(/^\s*[-*+] \[[ xX]\]/gm)?.length ?? 0
-    const done = text.match(/^\s*[-*+] \[[xX]\]/gm)?.length ?? 0
+    const total = text.match(/^[ \t]*[-*+] \[[ xX]\]/gm)?.length ?? 0
+    const done = text.match(/^[ \t]*[-*+] \[[xX]\]/gm)?.length ?? 0
     const heading = text.match(/^#\s+(.+)$/m)?.[1]
     // "T-001 · Set up the project" → "Set up the project"; the id is shown on its own.
     const title = asText(meta.title) ?? (heading && id ? heading.replace(new RegExp(`^${id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*[·:-]\\s*`), '') : heading)

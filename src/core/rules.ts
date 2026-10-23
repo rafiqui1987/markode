@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import YAML from 'yaml'
-import { DEFAULT_SOURCE, GLOBAL_DIR, isLang, type Lang, LANG_NAMES, mainDocOf, TEMPLATES_DIR } from './config.js'
+import { assertInside, DEFAULT_SOURCE, GLOBAL_DIR, isLang, type Lang, LANG_NAMES, mainDocOf, TEMPLATES_DIR } from './config.js'
 
 export interface Rule {
   id: string
@@ -126,5 +126,6 @@ export function applyRulesToFile(file: string, ids?: string[], sourceLang?: Lang
   const written = writtenRules(text)
   // A rule already in the doc but missing from this machine's presets keeps its written body.
   const rules = (ids ?? appliedRuleIds(text)).map((id) => all.find((r) => r.id === id) ?? written[id]).filter((r): r is Rule => !!r)
+  assertInside(file)
   fs.writeFileSync(file, applyRules(text, rules, sourceLang ?? sourceLangOf(text)))
 }

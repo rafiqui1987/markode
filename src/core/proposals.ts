@@ -1,8 +1,8 @@
-import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
-import { mainDocOf, readConfig, TEMPLATES_DIR, writeConfig } from './config.js'
+import { assertInside, mainDocOf, readConfig, TEMPLATES_DIR, writeConfig } from './config.js'
 import { fill } from './scaffold.js'
+import { runGit } from './git.js'
 import { writeManagedBlock } from './sdd.js'
 import { PROJECT_TARGETS, projectTargets } from './skills.js'
 
@@ -53,6 +53,7 @@ export function activateProposals(root: string, layout: ProposalLayout, mainDoc:
   const text = fill(fs.readFileSync(path.join(TEMPLATES_DIR, 'proposals', 'SKILL.md'), 'utf8'), { where: WHERE[layout] })
   for (const target of projectTargets(root)) {
     const file = path.join(root, PROJECT_TARGETS[target], SKILL, 'SKILL.md')
+    assertInside(file)
     fs.mkdirSync(path.dirname(file), { recursive: true })
     if (!fs.existsSync(file) || fs.readFileSync(file, 'utf8') !== text) fs.writeFileSync(file, text)
   }
@@ -63,14 +64,14 @@ export function activateProposals(root: string, layout: ProposalLayout, mainDoc:
 
 /** Remove the skill and the main doc section; existing proposals and comments stay as they are. */
 export function deactivateProposals(root: string, mainDoc: string | null) {
-  for (const dir of skillDirs(root)) fs.rmSync(dir, { recursive: true, force: true })
+  for (const dir of skillDirs(root)) if (fs.existsSync(dir)) assertInside(dir), fs.rmSync(dir, { recursive: true, force: true })
   for (const file of mainDocs(root, mainDoc)) writeManagedBlock(file, null, false, 'proposals')
 }
 
 /** Name used to sign comments: git's user.name for this project, if any. */
 export function authorName(root: string): string | null {
   try {
-    return execFileSync('git', ['config', 'user.name'], { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim() || null
+    return runGit(root, ['config', 'user.name']).trim() || null
   } catch {
     return null
   }

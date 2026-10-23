@@ -64,7 +64,10 @@ export function missingMainDoc(dir: string): MainDoc | null {
 /** Create the main doc a folder lacks, pointing to the one it has. Returns the created name, if any. */
 export function linkMainDoc(dir: string): MainDoc | null {
   const missing = missingMainDoc(dir)
-  if (missing) fs.writeFileSync(path.join(dir, missing), POINTERS[missing])
+  if (missing) {
+    assertInside(path.join(dir, missing))
+    fs.writeFileSync(path.join(dir, missing), POINTERS[missing])
+  }
   return missing
 }
 
@@ -114,21 +117,71 @@ export function readConfig(root: string): ProjectConfig | null {
     const raw = JSON.parse(fs.readFileSync(configFile(root), 'utf8'))
     // v0.1 stored a single `lang`.
     const langs = Array.isArray(raw.langs) ? raw.langs : raw.lang ? [raw.lang] : []
-    return { mainDoc: raw.mainDoc ?? null, langs: langs.filter(isLangCode), langNames: raw.langNames, workflow: raw.workflow, proposals: raw.proposals, skipLink: raw.skipLink === true || undefined, features: raw.features, savedRules: raw.savedRules, savedSourceLang: isLang(raw.savedSourceLang) ? raw.savedSourceLang : undefined, initializedAt: raw.initializedAt }
+    // Every field is checked: a repository can ship its own .markode/config.json.
+    const mainDoc = MAIN_DOCS.includes(raw.mainDoc) ? raw.mainDoc : null
+    const workflow = ['none', 'markode', 'openspec', 'speckit'].includes(raw.workflow) ? raw.workflow : undefined
+    const proposals = raw.proposals === 'general' || raw.proposals === 'structured' ? raw.proposals : undefined
+    const langNames = raw.langNames && typeof raw.langNames === 'object' ? Object.fromEntries(Object.entries(raw.langNames).filter(([k, v]) => isLangCode(k) && typeof v === 'string').map(([k, v]) => [k, (v as string).slice(0, 40)])) : undefined
+    const flags = raw.features && typeof raw.features === 'object' ? Object.fromEntries(['rules', 'translations', 'dashboard', 'skills'].filter((k) => typeof raw.features[k] === 'boolean').map((k) => [k, raw.features[k]])) : undefined
+    const savedRules = Array.isArray(raw.savedRules) ? raw.savedRules.filter((id: unknown) => typeof id === 'string' && /^[\w-]+$/.test(id)) : undefined
+    return { mainDoc, langs: langs.filter(isLangCode), langNames, workflow, proposals, skipLink: raw.skipLink === true || undefined, features: flags, savedRules, savedSourceLang: isLang(raw.savedSourceLang) ? raw.savedSourceLang : undefined, initializedAt: typeof raw.initializedAt === 'string' ? raw.initializedAt : undefined }
   } catch {
     return null
   }
 }
 
 export function writeConfig(root: string, config: ProjectConfig) {
+  assertInside(configFile(root))
   fs.mkdirSync(stateDir(root), { recursive: true })
   fs.writeFileSync(configFile(root), JSON.stringify(config, null, 2) + '\n')
 }
 
-/** Resolve a repo-relative path and refuse anything outside the root. */
+const isInside = (abs: string, base: string) => abs === base || abs.startsWith(base + path.sep)
+
+/** Where `abs` really is once symlinks are followed (through its deepest existing part); null when a link is broken. */
+function realOf(abs: string): string | null {
+  let probe = abs
+  const rest: string[] = []
+  for (;;) {
+    try {
+      fs.lstatSync(probe)
+      break
+    } catch {
+      const up = path.dirname(probe)
+      if (up === probe) return null
+      rest.unshift(path.basename(probe))
+      probe = up
+    }
+  }
+  try {
+    return path.join(fs.realpathSync(probe), ...rest)
+  } catch {
+    return null
+  }
+}
+
+/**
+ * The project markode works on. A repository can hold symlinks to anywhere (`docs -> ~/.ssh`, a
+ * `CLAUDE.md` pointing to a file in the home folder), so every write markode makes is checked against it.
+ */
+let projectRoot: string | null = null
+export function setProjectRoot(root: string) {
+  projectRoot = fs.realpathSync(root)
+}
+
+/** Refuse a write (or delete) whose real target, symlinks followed, is outside the project. */
+export function assertInside(abs: string, root: string | null = projectRoot) {
+  if (!root) return
+  const base = fs.realpathSync(root)
+  const real = realOf(abs)
+  if (!real || !isInside(real, base)) throw new Error(`Refusing to write outside the project (symlink?): ${abs}`)
+}
+
+/** Resolve a repo-relative path and refuse anything outside the root, symlinks included. */
 export function safeResolve(root: string, rel: string): string {
   const abs = path.resolve(root, rel)
-  if (abs !== root && !abs.startsWith(root + path.sep)) throw new Error(`Path outside project: ${rel}`)
+  if (!isInside(abs, root)) throw new Error(`Path outside project: ${rel}`)
+  assertInside(abs, root)
   return abs
 }
 

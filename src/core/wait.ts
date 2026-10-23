@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import YAML from 'yaml'
-import { stateDir } from './config.js'
+import { assertInside, stateDir } from './config.js'
 
 /**
  * `markode wait <proposal>`: the agent runs it in the background after writing a proposal. It waits,
@@ -44,6 +44,7 @@ export function waitingOn(root: string): string[] {
 export function waitForAnswer(root: string, rel: string): Promise<'answered' | 'gone'> {
   const abs = path.join(root, rel)
   fs.mkdirSync(waitsDir(root), { recursive: true })
+  assertInside(pidFile(root, rel))
   fs.writeFileSync(pidFile(root, rel), String(process.pid))
   const cleanup = () => fs.rmSync(pidFile(root, rel), { force: true })
   process.once('exit', cleanup)

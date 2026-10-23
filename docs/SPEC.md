@@ -180,9 +180,10 @@ project's source language and the user's translation languages (shown with the A
   hidden in the sidebar (shown with "show ignored", without the option to un-ignore it), and left out
   of the dashboard, `markode check`, translations and `markode changes`. The skills tell agents never
   to read or search it unless the user asks about a past proposal.
-- **The user's edits while an agent works**: every save from markode is logged in
-  `.markode/activity.jsonl` (comments added, and the section of any other edit; proposals excluded, their
-  comments travel with the answer). `markode changes` reports what the agent hasn't been told yet;
+- **The user's edits while an agent works**: every save from markode is logged (comments added, and the
+  section of any other edit; proposals excluded, their comments travel with the answer) in
+  `~/.markode/projects/<hash of the project's real path>/activity.jsonl`, outside the project so a
+  repository can't ship one. `markode changes` reports what the agent hasn't been told yet;
   `--start` marks a new session; `--hook <event>` prints it as Claude Code hook output, silent when nothing
   changed. The Live changes module adds the `SessionStart`, `UserPromptSubmit` and `PostToolUse` hooks to
   `.claude/settings.local.json`.

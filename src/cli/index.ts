@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { formatChanges, startSession, takeChanges } from '../core/changes.js'
 import { checkDocs } from '../core/check.js'
-import { PKG_ROOT, readConfig, writeConfig } from '../core/config.js'
+import { PKG_ROOT, readConfig, setProjectRoot, writeConfig } from '../core/config.js'
 import { BASE_DEFAULTS, readDefaults, writeDefaults } from '../core/defaults.js'
 import { FEATURE_INFO, FEATURES, featureState, isFeature, isProfile, PROFILE_FEATURES, refreshInstalled, REQUIRES, setFeature } from '../core/features.js'
 import { keepLanguage, markSynced, syncReport } from '../core/i18n.js'
@@ -56,6 +56,8 @@ const command = args[0] && !args[0].startsWith('-') ? args[0] : 'start'
 const root = process.env.MARKODE_ROOT ?? process.cwd()
 
 async function main() {
+  // Every write markode makes is checked against the real path of the project (see assertInside).
+  if (fs.existsSync(root)) setProjectRoot(root)
   if (flag('--help') || flag('-h')) return console.log(HELP)
   if (flag('--version') || flag('-v')) return console.log(JSON.parse(fs.readFileSync(path.join(PKG_ROOT, 'package.json'), 'utf8')).version)
 
