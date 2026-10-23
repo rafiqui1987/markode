@@ -382,11 +382,17 @@ markode features            # which modules are on, with what each one does
 markode features live off   # turn a module on or off (same as Settings → Features)
 markode translate           # choose languages to review the docs in (also: markode --translate)
 markode link                # only CLAUDE.md or only AGENTS.md? add the other one, pointing to it
+markode update              # install the latest version now (see below)
 markode -v                  # version
 ```
 
 To keep it installed: `npm install -g @rafiqui987/markode` (or `pnpm add -g @rafiqui987/markode`).
 Installing it also makes the Claude Code hooks faster than running through `npx`.
+
+**A new version right away.** pnpm (and npm with `min-release-age`) wait a day before installing a
+version just published. `markode update` asks the npm registry for the latest version and installs it
+now, with the same package manager that installed markode (`--pnpm` or `--npm` to choose);
+`markode update --check` only says whether there is one.
 
 ## For AI agents
 

@@ -8,6 +8,7 @@ import { FEATURE_INFO, FEATURES, featureState, isFeature, isProfile, PROFILE_FEA
 import { keepLanguage, markSynced, syncReport } from '../core/i18n.js'
 import { linkMainDocs, missingMainDocs } from '../core/scaffold.js'
 import { editorUrl, ensureServer, runningServer } from '../core/server.js'
+import { CURRENT_VERSION, installCommand, installer, isNewer, latestVersion, runInstall } from '../core/update.js'
 import { answerSummary, waitForAnswer } from '../core/wait.js'
 import { startServer } from '../server/index.js'
 import { askFeatures, type InitPlan, runInit, runSetup } from './init.js'
@@ -32,6 +33,8 @@ Usage
   markode changes [--json] what the user edited or commented in markode since the agent was last told
   markode changes --start  a new agent session: what happened before is old news
   markode changes --hook <event>  the same, as Claude Code hook output (silent when nothing changed)
+  markode update [--check] install the latest version now, without the day npm/pnpm wait for new releases
+  markode update --pnpm|--npm  the same, choosing the package manager to install it with
 
 For the agent's /markode translate:
   markode translate --status [--json]                    translations + files not in the source language
@@ -68,12 +71,16 @@ async function main() {
   const translation = flag('--status') || flag('--mark') || flag('--keep')
   if ((command === 'sync' || command === 'translate') && translation) return sync()
   if (command === 'translate' || flag('--translate')) return runTranslate(root)
+  // What an agent runs at the start of a session: it also brings an older skill up to this version, so
+  // commands added since (e.g. `/markode` opening the editor) work without starting the editor first.
+  if (['check', 'url', 'link'].includes(command) || (command === 'changes' && flag('--start'))) refreshInstalled(root)
   if (command === 'check') return check()
   if (command === 'wait') return wait()
   if (command === 'link') return link()
   if (command === 'changes') return changes()
   if (command === 'url') return url()
   if (command === 'stop') return stop()
+  if (command === 'update') return update()
   if (command === 'features') return features()
   if (command === 'setup') {
     await runSetup(false, flag('--custom'))
@@ -191,6 +198,22 @@ function stop() {
   if (!running) return console.log('The editor is not running for this project.')
   process.kill(running.pid)
   console.log(`Stopped the editor on port ${running.port}.`)
+}
+
+/** Install the version just published: pnpm and npm can hold back releases younger than a day. */
+async function update() {
+  const latest = await latestVersion()
+  if (!isNewer(latest, CURRENT_VERSION)) return console.log(`markode ${CURRENT_VERSION} is the latest version.`)
+  console.log(`markode ${latest} is out (you have ${CURRENT_VERSION}).`)
+  if (flag('--check')) return
+  const via = flag('--pnpm') ? 'pnpm' : flag('--npm') ? 'npm' : installer()
+  if (via === 'npx') return console.log(`Running through npx: use \`npx -y @rafiqui987/markode@${latest}\` once to fetch it, or install it with \`markode update --pnpm\` (or --npm).`)
+  if (!via) return console.log('This copy runs from a clone of the repository: pull and build it, or install it with `markode update --pnpm` (or --npm).')
+  const cmd = installCommand(via, latest)
+  console.log(`$ ${cmd.join(' ')}`)
+  if (runInstall(cmd)) return console.log(`Updated to ${latest}. A running editor keeps the old version until \`markode stop\`.`)
+  console.error('The install failed; the output above says why.')
+  process.exitCode = 1
 }
 
 function changes() {
