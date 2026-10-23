@@ -20,6 +20,8 @@ export interface TreeNode {
   kind: 'dir' | 'file'
   project?: boolean
   ignored?: boolean
+  /** An applied proposal kept for the user: always ignored. */
+  archived?: boolean
   children?: TreeNode[]
 }
 
@@ -38,7 +40,15 @@ export interface Info {
   author: string | null
   /** CLAUDE.md / AGENTS.md the project lacks (empty once the user declined): `markode link` adds them. */
   unlinked: { path: string; pointsTo: string }[]
+  /** Modules on in this project (the viewer is always on). */
+  features: Record<Feature, boolean>
 }
+
+/** What markode adds to a project besides the viewer; see src/core/features.ts. */
+export type Feature = 'agent' | 'rules' | 'proposals' | 'live' | 'translations' | 'dashboard' | 'skills' | 'vscode'
+export const FEATURES: Feature[] = ['agent', 'rules', 'proposals', 'live', 'translations', 'dashboard', 'skills', 'vscode']
+/** Modules that only work with the AI agent. */
+export const REQUIRES: Partial<Record<Feature, Feature>> = { rules: 'agent', proposals: 'agent', live: 'agent', translations: 'agent' }
 
 export type ProposalLayout = 'general' | 'structured'
 
@@ -132,6 +142,7 @@ const q = encodeURIComponent
 
 export const api = {
   info: () => call<Info>('GET', '/api/info'),
+  setFeature: (feature: Feature, on: boolean) => call<Record<Feature, boolean>>('PUT', '/api/features', { feature, on }),
   setProposals: (active: boolean, layout: ProposalLayout) => call<Info['proposals']>('PUT', '/api/proposals', { active, layout }),
   setConfig: (config: { langs?: string[]; langNames?: Record<string, string>; sourceLang?: Lang }) => call('PUT', '/api/config', config),
   translations: () => call<{ pending: number }>('GET', '/api/translations'),

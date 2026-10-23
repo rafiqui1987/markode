@@ -1,12 +1,17 @@
 import { syntaxTree } from '@codemirror/language'
-import { type EditorState, Facet, type Range, type SelectionRange, StateEffect, StateField } from '@codemirror/state'
+import { EditorState, Facet, type Range, type RangeSet, StateEffect, StateField } from '@codemirror/state'
 import { Decoration, type DecorationSet, EditorView } from '@codemirror/view'
-import type { T } from '../i18n'
+import { LANG_NAMES } from '../api'
+import type { T, TKey } from '../i18n'
 import { choiceList, commentAuthor, CommentThreadWidget, findThreads, isChoiceMarker } from './comments'
-import { BulletWidget, ChoiceLabelWidget, CheckboxWidget, CodeLangWidget, type Theme, FootnoteDefWidget, FootnoteRefWidget, imageUrl, ImageWidget, MathWidget, MermaidWidget, RuleWidget, TableWidget, TreeWidget } from './widgets'
+import { linkActions } from './links'
+import { BulletWidget, ChoiceLabelWidget, CheckboxWidget, CodeLangWidget, type Theme, FootnoteDefWidget, FootnoteRefWidget, imageUrl, ImageWidget, MarkerWidget, MathWidget, MermaidWidget, NoteWidget, RegionStartWidget, RuleWidget, showSource, TableWidget, TreeWidget } from './widgets'
 
 /** Path of the open document, relative to the project: relative image paths resolve against it. */
 export const docPath = Facet.define<string, string>({ combine: (v) => v[0] ?? '' })
+
+/** Opens a project document in markode: where a relative link to a `.md` file goes. */
+export const openDoc = Facet.define<(path: string) => void, ((path: string) => void) | null>({ combine: (v) => v[0] ?? null })
 
 /** UI strings for widgets that show text (comment threads). */
 export const translator = Facet.define<T, T>({ combine: (v) => v[0] ?? ((k: string) => k) as T })
@@ -21,36 +26,50 @@ const theme = StateField.define<Theme>({
 const setFocused = StateEffect.define<boolean>()
 const setPressing = StateEffect.define<boolean>()
 
+/** Elements whose source can be shown on request: blocks from their `</>` button, inline ones on click. */
+const BLOCKS = new Set(['FencedCode', 'Table', 'BlockMath'])
+const INLINE = new Set(['Image', 'InlineMath', 'FootnoteRef', 'HorizontalRule', 'Comment', 'CommentBlock'])
+
+/** The range whose source to show for the element at `pos`: the whole element, or else its line. */
+function sourceRange(state: EditorState, pos: number) {
+  for (let node: ReturnType<ReturnType<typeof syntaxTree>['resolveInner']> | null = syntaxTree(state).resolveInner(pos, 1); node; node = node.parent) {
+    if (BLOCKS.has(node.name)) return { from: state.doc.lineAt(node.from).from, to: state.doc.lineAt(node.to).to }
+    if (INLINE.has(node.name)) return { from: node.from, to: node.to }
+  }
+  const line = state.doc.lineAt(pos)
+  return { from: line.from, to: line.to }
+}
+
 interface Reveal {
-  /** Without focus nothing shows raw source, even where the cursor sits. */
-  focused: boolean
-  /** Ranges whose lines show raw source. */
-  ranges: readonly SelectionRange[]
+  /** The one element showing its Markdown source, if any; everything else stays rendered. */
+  range: { from: number; to: number } | null
   /** A mouse button is down in the editor. */
   pressing: boolean
 }
 
 /**
- * Where raw source is shown. While the mouse is down it stays frozen: CodeMirror maps the pointer
- * to a position again on every move and on release, and blocks switching between rendered and raw
- * in the meantime would shift the text under the pointer (clicks landing paragraphs below).
+ * The visual view never shows Markdown on its own: an element shows its source only when asked
+ * (`showSource`), until the cursor leaves it or the editor loses focus. While the mouse is down
+ * nothing switches: CodeMirror maps the pointer to a position again on every move and on release,
+ * and an element switching between rendered and raw in the meantime would shift the text under it.
  */
 const reveal = StateField.define<Reveal>({
-  create: (state) => ({ focused: false, ranges: state.selection.ranges, pressing: false }),
+  create: () => ({ range: null, pressing: false }),
   update(value, tr) {
-    let v = value
-    if (tr.docChanged) v = { ...v, ranges: v.ranges.map((r) => r.map(tr.changes)) }
+    let { range, pressing } = value
+    if (range && tr.docChanged) range = { from: tr.changes.mapPos(range.from, -1), to: tr.changes.mapPos(range.to, 1) }
     for (const e of tr.effects) {
-      if (e.is(setPressing)) v = e.value ? { ...v, pressing: true } : { focused: v.focused, ranges: tr.state.selection.ranges, pressing: false }
-      else if (e.is(setFocused)) v = { ...v, focused: e.value, ...(v.pressing ? {} : { ranges: tr.state.selection.ranges }) }
+      if (e.is(showSource)) range = sourceRange(tr.state, e.value)
+      else if (e.is(setPressing)) pressing = e.value
+      else if (e.is(setFocused) && !e.value) range = null
     }
-    if (tr.selection && !v.pressing) v = { ...v, ranges: tr.state.selection.ranges }
-    else if (tr.selection && !tr.isUserEvent('select.pointer')) v = { ...v, ranges: tr.state.selection.ranges, pressing: false }
-    return v
+    const head = tr.state.selection.main.head
+    if (range && !pressing && (head < range.from || head > range.to)) range = null
+    return range === value.range && pressing === value.pressing ? value : { range, pressing }
   },
 })
 
-/** Freezes the revealed ranges between mousedown and mouseup (see `reveal`). */
+/** Freezes what is revealed between mousedown and mouseup (see `reveal`). */
 const pointerTracking = EditorView.domEventHandlers({
   mousedown(event, view) {
     if (event.button !== 0) return false
@@ -65,15 +84,77 @@ const hidden = Decoration.replace({})
 const line = (cls: string) => Decoration.line({ class: cls })
 const mark = (cls: string) => Decoration.mark({ class: cls })
 
+/** Comment threads and `<!-- choose: one -->` have widgets of their own. */
+const OWN_WIDGET = /^\s*<!-- (?:(?:comment|reply) by |choose:)/
+
+/** A marker tools read: `name:key:value`, no spaces (`markode:source-lang:es`, `rule:pnpm-only`). */
+const MARKER = /^<!--\s*([\w.-]+(?::[\w.-]+)+)\s*-->$/
+
+/** `<!-- name:key:start -->` / `:end`: the region's key (`name:key`) and which end it is. */
+function regionMark(text: string) {
+  const m = MARKER.exec(text.trim())
+  const end = m && /:(start|end)$/.exec(m[1])
+  return end && m[1].split(':').length > 2 ? { key: m[1].slice(0, end.index), start: end[1] === 'start' } : null
+}
+
+/** A region start marker, even with an empty or partial name. */
+const START_LIKE = /^\s*<!--\s*[\w.:-]*:start\s*-->\s*$/
+
 /**
- * Obsidian-style live preview: Markdown syntax is hidden and rich blocks are
- * rendered everywhere except where the selection touches, which shows raw source.
+ * Renaming a region in its start marker renames it in the end marker too, so the pair stays matched
+ * (`<!-- region:a:start -->` … `<!-- region:a:end -->`).
  */
-function build(state: EditorState): DecorationSet {
+export const regionSync = EditorState.transactionFilter.of((tr) => {
+  if (!tr.docChanged) return tr
+  const before = tr.startState.doc
+  const renames: { from: number; to: number; insert: string }[] = []
+  tr.changes.iterChangedRanges((fromA, _toA, fromB) => {
+    const old = before.lineAt(fromA)
+    const now = regionMark(tr.newDoc.lineAt(fromB).text)
+    // The old start may have had no valid name for a moment (all of it deleted before typing a new one).
+    if (!now?.start || !START_LIKE.test(old.text) || regionMark(old.text)?.key === now.key) return
+    // Its end: the first one after it that closes no region nested inside.
+    let depth = 0
+    for (let n = old.number + 1; n <= before.lines; n++) {
+      const l = before.line(n)
+      const r = regionMark(l.text)
+      if (!r) continue
+      if (r.start) depth++
+      else if (depth-- === 0) {
+        if (r.key === now.key) break
+        const at = l.from + l.text.indexOf(r.key)
+        renames.push({ from: tr.changes.mapPos(at, 1), to: tr.changes.mapPos(at + r.key.length, -1), insert: now.key })
+        break
+      }
+    }
+  })
+  return renames.length ? [tr, { changes: renames, sequential: true }] : tr
+})
+
+interface Preview {
+  deco: DecorationSet
+  /** Hidden or replaced syntax: the cursor steps over it as one unit. */
+  atomic: RangeSet<Decoration>
+  /** Per line, the hidden prefix (heading mark, bullet, quote mark) and where the text after it starts. */
+  prefixes: Map<number, { from: number; to: number }>
+}
+
+/**
+ * Visual view: Markdown syntax is hidden and rich blocks are rendered, always. Only the element
+ * asked for (see `reveal`) shows its source.
+ */
+function build(state: EditorState): Preview {
   const out: Range<Decoration>[] = []
+  const prefixes = new Map<number, { from: number; to: number }>()
   const { doc } = state
-  const { focused, ranges } = state.field(reveal)
-  const touches = (from: number, to: number) => focused && ranges.some((r) => r.from <= to && r.to >= from)
+  const shown = state.field(reveal).range
+  const touches = (from: number, to: number) => !!shown && shown.from <= to && shown.to >= from
+  /** Hide a line's block prefix starting at `from`; the cursor goes after it and the spaces that follow. */
+  const prefix = (from: number) => {
+    const l = doc.lineAt(from)
+    const rest = /^(?:#{1,6}|>|(?:[-*+]|\d+[.)])(?:\s+\[[ xX]\])?)\s*/.exec(l.text.slice(from - l.from))
+    if (rest) prefixes.set(l.number, { from, to: from + rest[0].length })
+  }
   const lineTouches = (pos: number) => {
     const l = doc.lineAt(pos)
     return touches(l.from, l.to)
@@ -92,6 +173,33 @@ function build(state: EditorState): DecorationSet {
   for (const m of text.matchAll(/\[\^([^\]\s]+)\](?!:)/g)) if (!numbers.has(m[1])) numbers.set(m[1], String(numbers.size + 1))
   const footnoteNumber = (label: string) => numbers.get(label) ?? label
 
+  // Regions a tool manages: each start line with its end line.
+  const t = state.facet(translator)
+  const regions = new Map<number, { end: number; key: string }>()
+  // An end closes the open start with its key or, while its key is being renamed, the innermost one.
+  const open: { key: string; line: number }[] = []
+  for (let n = 1; n <= doc.lines; n++) {
+    const r = regionMark(doc.line(n).text)
+    if (r?.start) open.push({ key: r.key, line: n })
+    else if (r && open.length) {
+      const i = open.map((o) => o.key).lastIndexOf(r.key)
+      const [o] = open.splice(i < 0 ? open.length - 1 : i, 1)
+      regions.set(o.line, { end: n, key: o.key })
+    }
+  }
+  const LABELS: Record<string, TKey> = { 'markode:rules': 'region.rules', 'markode:workflow': 'region.workflow', 'markode:proposals': 'region.proposals' }
+  const regionLabel = (key: string) => (LABELS[key] ? t(LABELS[key]) : key.split(':').pop()!)
+  for (const [start, { end, key }] of regions) {
+    const first = doc.line(start)
+    const last = doc.line(end)
+    // The end marker's line shrinks to the bracket's closing corner while hidden.
+    const closed = !touches(last.from, last.to)
+    for (let n = start; n <= end; n++) out.push(line(`cm-region${n === start ? ' cm-region-start' : ''}${n === end ? ` cm-region-end${closed ? ' cm-region-closed' : ''}` : ''}`).range(doc.line(n).from))
+    const title = `${doc.sliceString(first.from, first.to).trim()}${key.startsWith('markode:') ? `\n${t('region.managed')}` : ''}`
+    if (!touches(first.from, first.to)) out.push(Decoration.replace({ widget: new RegionStartWidget(regionLabel(key), title) }).range(first.from, first.to))
+    if (closed) out.push(hidden.range(last.from, last.to))
+  }
+
   syntaxTree(state).iterate({
     enter(node) {
       const name = node.name
@@ -109,7 +217,10 @@ function build(state: EditorState): DecorationSet {
       if (heading) {
         out.push(line(`cm-h cm-h${heading[1]}`).range(doc.lineAt(node.from).from))
         const hm = node.node.getChild('HeaderMark')
-        if (hm && name.startsWith('ATX') && !touches(node.from, node.to)) out.push(hidden.range(hm.from, Math.min(hm.to + 1, node.to)))
+        if (hm && name.startsWith('ATX') && !touches(node.from, node.to)) {
+          out.push(hidden.range(hm.from, Math.min(hm.to + 1, node.to)))
+          prefix(hm.from)
+        }
         return
       }
 
@@ -173,6 +284,8 @@ function build(state: EditorState): DecorationSet {
           const next = node.node.nextSibling
           if (next?.name === 'Task') out.push(hidden.range(node.from, Math.min(node.to + 1, next.from)))
           else if (node.node.parent?.parent?.name === 'BulletList') out.push(Decoration.replace({ widget: new BulletWidget() }).range(node.from, node.to))
+          else return
+          prefix(node.from)
           return
         }
         case 'Task': {
@@ -224,6 +337,27 @@ function build(state: EditorState): DecorationSet {
           eachLine(node.from, node.to, (l) => out.push(line('cm-quote').range(l.from)))
           return
         }
+        case 'QuoteMark': {
+          if (lineTouches(node.from)) return
+          out.push(hidden.range(node.from, doc.sliceString(node.to, node.to + 1) === ' ' ? node.to + 1 : node.to))
+          prefix(node.from)
+          return
+        }
+        case 'Comment':
+        case 'CommentBlock': {
+          const raw = doc.sliceString(node.from, node.to)
+          if (OWN_WIDGET.test(raw) || regionMark(raw) || touches(node.from, node.to)) return false
+          const marker = MARKER.exec(raw.trim())
+          const parts = marker?.[1].split(':') ?? []
+          let widget
+          if (marker && parts[0] === 'markode' && parts[1] === 'source-lang') {
+            const code = parts[2] ?? ''
+            widget = new MarkerWidget((LANG_NAMES as Record<string, string>)[code] ?? code, t('marker.sourceLang'), true)
+          } else if (marker) widget = new MarkerWidget(marker[1], marker[1], false)
+          else widget = new NoteWidget(raw.replace(/^\s*<!--\s?|\s?-->\s*$/g, '').trim())
+          out.push(Decoration.replace({ widget }).range(node.from, node.to))
+          return false
+        }
         case 'HorizontalRule': {
           if (!lineTouches(node.from)) out.push(Decoration.replace({ widget: new RuleWidget() }).range(node.from, node.to))
           return
@@ -250,25 +384,40 @@ function build(state: EditorState): DecorationSet {
     if (isChoiceMarker(l.text) && !touches(l.from, l.to)) out.push(Decoration.replace({ widget: new ChoiceLabelWidget(state.facet(translator)('choice.one')) }).range(l.from, l.to))
   }
 
-  return Decoration.set(out, true)
+  return { deco: Decoration.set(out, true), atomic: Decoration.set(out.filter((r) => r.value === hidden || r.value.spec.widget), true), prefixes }
 }
 
-const preview = StateField.define<DecorationSet>({
+const preview = StateField.define<Preview>({
   create: build,
-  update(deco, tr) {
-    const before = tr.startState.field(reveal)
-    const after = tr.state.field(reveal)
+  update(value, tr) {
     if (
       tr.docChanged ||
-      before.focused !== after.focused ||
-      before.ranges !== after.ranges ||
-      tr.startState.field(theme) !== tr.state.field(theme) ||
+      // `false`: the fields are missing from the previous state when the visual view was just turned on.
+      tr.startState.field(reveal, false)?.range !== tr.state.field(reveal).range ||
+      tr.startState.field(theme, false) !== tr.state.field(theme) ||
       syntaxTree(tr.startState) !== syntaxTree(tr.state)
     )
       return build(tr.state)
-    return deco
+    return value
   },
-  provide: (f) => EditorView.decorations.from(f),
+  provide: (f) => [EditorView.decorations.from(f, (p) => p.deco), EditorView.atomicRanges.of((view) => view.state.field(f).atomic)],
 })
 
-export const livePreview = [theme, reveal, preview, pointerTracking, EditorView.focusChangeEffect.of((_, focusing) => setFocused.of(focusing))]
+/**
+ * A cursor never rests inside or before a hidden line prefix: typing there would break the heading,
+ * list item or quote. It moves after the prefix, and arrowing left from there goes to the line above.
+ */
+const skipPrefixes = EditorState.transactionFilter.of((tr) => {
+  if (!tr.selection) return tr
+  const sel = tr.selection.main
+  if (!sel.empty) return tr
+  const state = tr.state
+  const line = state.doc.lineAt(sel.head)
+  const p = state.field(preview).prefixes.get(line.number)
+  if (!p || sel.head < p.from || sel.head >= p.to) return tr
+  const before = tr.startState.selection.main.head
+  const back = !tr.docChanged && !tr.isUserEvent('select.pointer') && before === p.to && line.number > 1
+  return [tr, { selection: { anchor: back ? line.from - 1 : p.to }, sequential: true }]
+})
+
+export const livePreview = [theme, reveal, preview, skipPrefixes, pointerTracking, linkActions, EditorView.focusChangeEffect.of((_, focusing) => setFocused.of(focusing))]

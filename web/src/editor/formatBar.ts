@@ -77,7 +77,8 @@ function targetOf(state: EditorState): Target | null {
     const f = NODE_FORMAT[node.name]
     if (!f || node.from > from || node.to < to) continue
     formats.push(f)
-    covering ??= node
+    // Inside a link's text, the text is what gets formatted: the link stays around it.
+    if (f !== 'link') covering ??= node
   }
   const strip: [number, number][] = []
   if (covering) {
@@ -90,6 +91,7 @@ function targetOf(state: EditorState): Target | null {
       to: sel.to,
       enter: (n) => {
         if (!NODE_FORMAT[n.name] || n.to <= sel.from || n.from >= sel.to) return
+        if (n.name === 'Link' && n.from <= sel.from && n.to >= sel.to) return
         from = Math.min(from, n.from)
         to = Math.max(to, n.to)
         strip.push(...markRanges(n.node))

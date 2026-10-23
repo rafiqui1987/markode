@@ -17,22 +17,51 @@ so humans can edit comfortably while the AI keeps reading plain Markdown.
 
 ## 2. First run (init)
 
+The viewer is always installed. Everything else is a **module** (`src/core/features.ts`), chosen in one
+question through a profile, and turned on or off later in Settings → Features or `markode features`:
+
+| Profile | Modules |
+|---|---|
+| Viewer only | none: nothing is written to the project |
+| Viewer + AI agent (recommended) | agent, rules, proposals, live changes, translations, skills, hide in VS Code |
+| Complete | the above + dashboard and tasks |
+| Choose the modules | any set; a module that needs the agent turns it on |
+
+| Module | Needs | Writes | Off removes |
+|---|---|---|---|
+| AI agent | — | `markode` skill in `.claude/skills/` and/or `.agents/skills/` (per the agents the project uses), `markode:rules` section with the source language | the skill and the section (the source language is remembered in `.markode/config.json`) |
+| Working rules | agent | rules inside `markode:rules`; the Rules tab | the rules (remembered, restored when turned back on) |
+| Proposals | agent | `markode-proposals` skill, `markode:proposals` section | both; proposals and comments stay |
+| Live changes | agent | hooks in `.claude/settings.local.json` (personal) | markode's hooks only |
+| Translations | agent | `.markode/` only; the language switcher | nothing on disk; languages are kept |
+| Dashboard and tasks | — | the Dashboard tab; with the agent, the markode method (`docs/`, `markode-*` skills, `markode:workflow`) | the skills and section; docs and tasks stay |
+| Skills | — | the Skills tab | — |
+| Hide in VS Code | — | `files.exclude` in `.vscode/settings.json` | that entry |
+
+The first choice is saved as the default for new projects (`~/.markode/defaults.json`), which then ask
+nothing; `markode setup` changes it or switches to asking in each project. `init --profile <name>` and
+`init --yes` never ask. Setting a project up again only adds modules.
+
+Detected instead of asked (`init --custom` asks them all):
+
 | Situation | Behavior |
 |---|---|
-| `AGENTS.md` or `CLAUDE.md` exists | Ask: "Use this as the main document?" (with saved defaults: use it) |
+| `AGENTS.md` or `CLAUDE.md` exists | Used as the main document (both: the default one, `CLAUDE.md`) |
 | Only `AGENTS.md`, Claude Code used | Add a one-line `CLAUDE.md` that imports it (`@AGENTS.md`) |
-| Both exist | Ask which one is the main one |
-| Neither exists | Offer to create it |
+| Neither exists | Create the default one |
+| Source language | Detected from the project's docs before markode writes its own; the default otherwise |
 | Monorepo, front + back, folder of repos | Detect the projects; each gets its own main doc and `docs/tasks/` |
-| Project kind (app, library, mobile, data/ML, infrastructure, microservices) | Detected from files; asked when unclear; only that kind's questions |
-| Existing docs | Ask which are official; the main doc points the agent to them |
-| Always | Ask which **rule presets** to apply, none by default (see §3) |
+| Project kind (app, library, mobile, data/ML, infrastructure, microservices) | Detected from files |
+| Existing docs | All are official; the main doc points the agent to them |
+| OpenSpec or Spec Kit already there | Kept and shown in the dashboard |
+| Rules | The saved defaults' rules, none by default (see §3) |
 
 With the markode method, the setup creates only the task folder; vision, architecture and phases are
 created by the agent from the `markode-method` skill templates when there is something to write. A
 task's status lives only in its frontmatter (no task index).
 
-Init also installs the skill in `.claude/skills/markode/` so the AI writes using the conventions.
+markode keeps its state in `.markode/`, which ignores itself in git (`.markode/.gitignore`). When the
+editor starts, the skills and sections markode installed are refreshed to the running version.
 
 ## 3. Rule presets
 
@@ -40,7 +69,7 @@ Reusable rules describing *how I work*, selectable on every init.
 
 - Stored globally at `~/.markode/rules/*.md` (one file per rule), reusable across projects.
 - markode ships some defaults; the user can create, edit and delete their own from the app.
-- On init: multi-select checklist of available rules.
+- On `init --custom` and `setup --custom`: multi-select checklist of available rules; otherwise the saved defaults.
 - Selected rules are written into the main doc inside a managed section, so they can be updated later without touching the rest of the file:
 
 ```md
@@ -123,7 +152,8 @@ Global per user (`~/.markode/settings.json`), opened from the gear in the top ba
 | Indent (side margin) | 0–200 px slider |
 | Line width | Full / Readable (820 px) |
 
-The same panel holds the project's source language and the user's translation languages.
+The same panel holds the project's modules (Features: what each does and writes, with a switch), the
+project's source language and the user's translation languages (shown with the AI agent and Translations on).
 
 ## 6. Layout
 
@@ -136,8 +166,36 @@ The same panel holds the project's source language and the user's translation la
 
 ## 7. Editor
 
-- Engine: **CodeMirror 6** in **live preview** mode: single panel; Markdown is syntax-colored and
-  everything not under the cursor is rendered (mermaid, trees, tables, checkboxes). Cursor on it → raw source.
+- Engine: **CodeMirror 6**, single panel, two views (one button at the top right switches; every file opens in the markode view):
+  - **markode view** (default): Markdown syntax is always hidden and rich blocks are rendered (mermaid, trees,
+    tables, checkboxes), wherever the cursor is. The cursor steps over hidden syntax and never rests
+    before a heading, list or quote prefix. A block shows its source only from its `</>` button (inline
+    math, images and footnotes on click), until the cursor leaves it.
+  - **Markdown**: the plain source, syntax-colored.
+- **Links**: a click follows them (relative `.md` links open in markode, the rest in the browser).
+  Hovering shows the target with subtle buttons to edit it (text and URL) or copy it. Formatting the
+  text of a link keeps the link (`[**text**](url)`).
+- **Applied proposals are archived, not deleted**: the agent sets `status: applied` and moves the file to
+  an `applied/` folder next to it. Any `applied/` folder inside a `proposals/` folder is always ignored:
+  hidden in the sidebar (shown with "show ignored", without the option to un-ignore it), and left out
+  of the dashboard, `markode check`, translations and `markode changes`. The skills tell agents never
+  to read or search it unless the user asks about a past proposal.
+- **The user's edits while an agent works**: every save from markode is logged in
+  `.markode/activity.jsonl` (comments added, and the section of any other edit; proposals excluded, their
+  comments travel with the answer). `markode changes` reports what the agent hasn't been told yet;
+  `--start` marks a new session; `--hook <event>` prints it as Claude Code hook output, silent when nothing
+  changed. The Live changes module adds the `SessionStart`, `UserPromptSubmit` and `PostToolUse` hooks to
+  `.claude/settings.local.json`.
+- **HTML comments** in the markode view (comment threads and `<!-- choose: one -->` keep their own widgets):
+  - A note (`<!-- any text -->`, hidden when rendered elsewhere but read by agents): a subtle icon; the
+    text shows on hover, a click shows the comment to edit it.
+  - A region a tool manages (`<!-- name:key:start -->` … `<!-- name:key:end -->`, e.g. `markode:rules`):
+    a thin bracket along its lines with a small label; the markers are hidden.
+  - A marker tools read (`<!-- markode:source-lang:es -->`, `<!-- rule:pnpm-only -->`): a chip with the
+    language, or a small tag icon with the marker on hover.
+- **Actions** at the top right: undo, redo, discard changes, find and replace (also `Ctrl+F`/`Ctrl+H`
+  with the focus anywhere in the app, instead of the browser's), copy (the selection or the whole document,
+  as Markdown or as formatted text for Word/Docs/mail) and the markode/Markdown view switch.
 - Files are saved **exactly** as written (no reformatting) → clean diffs, readable by the AI.
 - **Colors per element type**: headings (one tone per level), inline code and code blocks, lists,
   checkboxes, tables, links, frontmatter.
@@ -145,7 +203,11 @@ The same panel holds the project's source language and the user's translation la
 ### Cursor command menu
 
 - Opens with `/` at the start of a line (and `Ctrl+Space` anywhere).
-- **Grouped and numbered**, every option with an icon. Pressing the number opens the submenu:
+- **Grouped and numbered**, every option with an icon. Pressing the number (or `→`) opens the submenu;
+  `0`, `←` or `Backspace` goes back to the groups.
+- Options apply to the **current line or the selection**: headings, lists and quotes prefix every
+  selected line (numbered lists count up), code blocks and diagrams fence the lines, inline code and
+  links wrap the selected text (or the line's text). On a blank line they insert a starter snippet.
 
 ```tree
 1. Headings
@@ -157,6 +219,7 @@ The same panel holds the project's source language and the user's translation la
   1. Bullets
   2. Numbered
   3. Checklist
+  4. Single-choice list (`<!-- choose: one -->`)
 3. Table
   1. New table
   2. Add row
@@ -167,7 +230,12 @@ The same panel holds the project's source language and the user's translation la
 5. Diagrams
   1. Mermaid
   2. Tree
-6. Other
+6. Comments and markers
+  1. Comment for discussion (only when comments are on: Proposals)
+  2. Hidden note (`<!-- -->`)
+  3. Marked region (`<!-- region:name:start -->` … `:end`; renaming the start renames the end)
+  4. Tag marker (`<!-- tag:name -->`)
+7. Other
   1. Quote
   2. Link
   3. Divider

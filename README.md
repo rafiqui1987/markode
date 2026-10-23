@@ -26,12 +26,34 @@ Requires Node.js 20 or newer. From the root of any project (monorepos included):
 npx @rafiqui987/markode
 ```
 
-The very first time, markode asks how you want your projects set up:
+The viewer is always there. The very first time, markode asks a single question: what else to install.
 
-- **With your answers** (default): answer once (main doc, how to plan the work, the language you
-  work in, rules…). They are saved in `~/.markode/defaults.json` and every new project is set up
-  with them, without questions. For a project that needs something else: `markode init --custom`.
-- **Ask in each project**: run `markode -D` the first time. Each project asks its own questions.
+| Choice | What you get |
+|---|---|
+| **Viewer only** | See and edit every `.md` file. Nothing is written to the project. |
+| **Viewer + AI agent** (recommended) | The viewer, plus the markode skill for your agent, working rules, proposals, comments, live changes and translations. |
+| **Complete** | All of the above, plus the dashboard and a docs structure for vision, architecture, phases and tasks. |
+| **Choose the modules** | Pick each module from the list below. |
+
+Your choice is saved as the default for new projects (in `~/.markode/defaults.json`), so they don't ask
+again. Everything else is detected: the main doc (`CLAUDE.md`, `AGENTS.md` or both), the agents the
+project uses, the language its docs are written in, its projects in a monorepo, and an existing
+OpenSpec or Spec Kit setup. Every module can be turned on or off later in **Settings → Features**.
+
+| Module | What it does | What it writes |
+|---|---|---|
+| **AI agent** | Teaches your agent (Claude Code, Codex, Cursor, Gemini…) how to work with these docs, and lets you comment on any text for it. | `.claude/skills/markode/` and/or `.agents/skills/markode/`, a "Working rules" section in the main doc with the source language |
+| **Working rules** | Rules the agent follows in this project, chosen in the Rules tab. Needs the AI agent. | Inside the "Working rules" section |
+| **Proposals** | The agent answers big questions with a doc you answer by ticking options and commenting. Needs the AI agent. | `markode-proposals` skill, a "Proposals" section in the main doc |
+| **Live changes** | Claude Code hears about your edits and comments while it works. Needs the AI agent. | Personal hooks in `.claude/settings.local.json` |
+| **Translations** | Read and edit the docs in other languages; the agent translates them. Needs the AI agent. | Only `.markode/` (personal) |
+| **Dashboard and tasks** | A Dashboard tab with the state of docs, proposals, phases and tasks; with the AI agent, also a structure for them (the markode method). | `docs/`, `markode-*` skills, a "Workflow" section in the main doc |
+| **Skills** | A tab to browse and edit your agents' skills and add them to the project. | Nothing |
+| **Hide in VS Code** | Hides `.markode/` from the VS Code explorer. | `.vscode/settings.json` |
+
+Turning a module off removes only what markode added (its sections, skills and hooks); your docs,
+tasks, proposals and comments stay. markode keeps its own state in `.markode/`, which ignores itself in
+git (`.markode/.gitignore`), so your `.gitignore` is never touched.
 
 Change your choice any time with `markode setup`. Then the editor opens at `http://localhost:4319`;
 it only listens on `127.0.0.1`.
@@ -89,7 +111,8 @@ Undo, redo and **discard** (back to how the file was when you opened it) sit nex
 ### 3. Formatting without remembering syntax
 
 - **`/` commands**: type `/` at the start of a line (or `Ctrl+Space` anywhere) for a menu of headings,
-  lists, checklists, tables, code blocks, diagrams, quotes, links and frontmatter.
+  lists, checklists, tables, code blocks, diagrams, quotes, links and frontmatter. The option applies
+  to the current line or the selected lines; pick with the number or the arrows, `0` or `←` goes back.
 - **Selection toolbar**: select text to copy it or turn it into bold, italic, strikethrough, code or a
   link. Hover a button for its variants (`**`/`__`, `*`/`_`, `***`).
 
@@ -201,7 +224,7 @@ markode runs their official installer, which also adds their commands to your ag
 structure with a guide on how to add them later. Projects that already use either are detected and
 shown as they are. Choose **None** and markode adds no structure or workflow at all.
 
-### 7. Proposals and comments: answer the AI with clicks
+### 7. Proposals and comments: answer the agent with clicks
 
 When an answer would be long or has options to choose from (or when you ask for one), the agent writes
 a **proposal** instead of a long chat message: options with small ASCII or Mermaid diagrams, choices to
@@ -234,8 +257,9 @@ tick, open questions, and the docs the decision will change. You answer in marko
 
 - **Send your answer**: the button marks the proposal as answered and copies a message to paste in your
   AI chat. The agent replies to your comments and updates every doc that depends on the decision
-  (tasks, phases, architecture…). A proposal is temporary: once applied, it is deleted and the decision
-  lives in those docs.
+  (tasks, phases, architecture…). Once applied, the decision lives in those docs and the proposal is
+  archived in an `applied/` folder next to it: hidden in markode (shown with "show ignored"), ignored
+  by the dashboard, checks and translations, and never read by the agent unless you ask about it.
 - In a monorepo, proposals are organized **by project and topic** (`apps/web/docs/proposals/auth/…`);
   in a big single project they can be organized by topic instead of one folder.
 
@@ -276,10 +300,15 @@ skill.
 
 ```bash
 markode                     # set up the project if needed, then open the editor
-markode init                # run the setup again (with your defaults, if you saved them)
-markode init --custom       # set up this project with its own answers
+markode init                # run the setup again: only adds modules (with your defaults, if you saved them)
+markode init --profile full # no questions: viewer, agent or full
+markode init --yes          # no questions: your defaults, or viewer + AI agent
+markode init --custom       # choose each module and answer every question for this project
 markode setup               # change your defaults, or switch to asking in each project
-markode -D                  # first run: don't save defaults, ask in each project
+markode setup --custom      # also choose the main doc, language, rules and monorepo layout
+markode -D                  # first run: don't save your choice as the default
+markode features            # which modules are on, with what each one does
+markode features live off   # turn a module on or off (same as Settings → Features)
 markode serve               # open the editor without the setup
 markode serve --port 5000 --no-open
 markode translate           # choose languages to review the docs in (also: markode --translate)
@@ -291,8 +320,10 @@ To keep it installed: `npm install -g @rafiqui987/markode` (or `pnpm add -g @raf
 
 ## For AI agents
 
-`markode init` installs `.claude/skills/markode/SKILL.md`, which tells the agent how to write Markdown
-that markode presents well, and gives it two commands:
+The AI agent module installs the `markode` skill (in `.claude/skills/` for Claude Code and in
+`.agents/skills/` for Codex, Copilot, Gemini and other agents, depending on which ones the project
+uses). It tells the agent how to write Markdown that markode presents well, and gives it two commands.
+markode refreshes the skills it installed every time the editor starts, so updating markode is enough:
 
 | Command | What the agent does | When |
 |---|---|---|
@@ -313,9 +344,41 @@ without using tokens until you press "Done, send my answer" in markode, then han
 choices, open questions and comments, and the agent continues by itself. If no session was open, the
 next one applies the answer first.
 
+### While the agent works
+
+You can keep editing and commenting in markode while the agent works. markode logs what you save
+(the agent's own edits go straight to disk, so they never count), and `markode changes` tells the agent
+what is new since it was last told:
+
+- a doc you edited (and which section): the agent re-reads it before working on that part;
+- a comment on what it is working on: it replies below it and applies it;
+- a comment on anything else: it asks you in one line whether to take it now.
+
+Comments in a proposal still travel with its answer (`markode wait`).
+
+**Claude Code hooks.** With the Live changes module, in projects that use Claude Code, markode adds
+three hooks to `.claude/settings.local.json` (personal: each teammate decides), so the agent hears
+about your edits and comments after every step, with no tokens spent while nothing changes:
+
+```json
+{
+  "hooks": {
+    "SessionStart": [{ "hooks": [{ "type": "command", "command": "markode changes --start" }] }],
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "markode changes --hook UserPromptSubmit" }] }],
+    "PostToolUse": [{ "hooks": [{ "type": "command", "command": "markode changes --hook PostToolUse" }] }]
+  }
+}
+```
+
+Without a global install the command is `npx -y --prefer-offline @rafiqui987/markode`; installing it
+(`npm i -g @rafiqui987/markode`) makes each hook faster. Other agents run `markode changes` themselves,
+as the markode skill tells them.
+
 ```bash
 markode check [--json]                                # what /markode sync fixes
 markode wait <proposal.md>                            # wait for the user's answer, then print it
+markode changes [--json]                              # the user's edits and comments since last told
+markode changes --start                               # a new session: what happened before is old news
 markode translate --status [--json]                   # translations + files not in the source language
 markode translate --mark [--lang xx] <path...>|--all  # record translations as in sync
 markode translate --keep <path...>                    # keep files in their current language
@@ -327,9 +390,11 @@ markode translate --keep <path...>                    # keep files in their curr
 npm uninstall -g markode    # or: pnpm remove -g markode (use the one you installed it with)
 ```
 
-To remove it from a project, delete `.markode/` and `.claude/skills/markode*/`, the `.markode/` line in
-`.gitignore`, and the `markode:rules`, `markode:workflow` and `markode:proposals` blocks in your main doc (keep the text
-inside if you still want it). Editor settings, rule presets and skill tags live in `~/.markode`.
+To remove it from a project, turn every module off (`markode features agent off`,
+`markode features dashboard off`, `markode features vscode off`) and delete `.markode/`. That removes
+the skills, hooks and the `markode:*` sections it added; your docs stay. Projects set up before 0.3 may
+also have a `.markode/` line in `.gitignore`. Editor settings, rule presets and skill tags live in
+`~/.markode`.
 
 ## Development
 

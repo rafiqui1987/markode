@@ -10,7 +10,7 @@ import type { T } from '../i18n'
 import { Footnotes, MathSyntax } from './extraSyntax'
 import { Frontmatter } from './frontmatter'
 import { commentAuthor } from './comments'
-import { docPath, livePreview, translator } from './livePreview'
+import { docPath, livePreview, regionSync, translator } from './livePreview'
 import { formatBar } from './formatBar'
 import { pasteTable } from './pasteTable'
 import { searchPanel } from './searchPanel'
@@ -66,8 +66,11 @@ const theme = EditorView.theme({
 /** Holds `EditorView.lineWrapping`, so the setting can change without rebuilding the editor. */
 export const wrapping = new Compartment()
 
+/** Holds the live preview: on in the visual view, off in the Markdown view (plain source). */
+export const previewing = new Compartment()
+
 /** `author` signs new comments; null when proposals and comments are off for the project. */
-export function editorExtensions(translate: T, path: string, wrap: boolean, author: string | null, onChange: (text: string) => void): Extension[] {
+export function editorExtensions(translate: T, path: string, wrap: boolean, visual: boolean, author: string | null, onChange: (text: string) => void): Extension[] {
   setWidgetTranslate(translate)
   return [
     history(),
@@ -81,7 +84,8 @@ export function editorExtensions(translate: T, path: string, wrap: boolean, auth
     docPath.of(path),
     translator.of(translate),
     commentAuthor.of(author),
-    livePreview,
+    previewing.of(visual ? livePreview : []),
+    regionSync,
     slashMenu(translate),
     taskHint(translate),
     formatBar(translate),

@@ -196,7 +196,7 @@ function createPanel(view: EditorView): Panel {
 }
 
 /** Ctrl+H: open the panel with the replace row. */
-const openReplace: Command = (view) => {
+export const openReplace: Command = (view) => {
   wantReplace.add(view)
   openSearchPanel(view)
   // Already open: the panel's update shows the row on the next transaction.

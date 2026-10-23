@@ -3,8 +3,11 @@ import { ChangeSet, EditorState, Transaction } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 import { type MutableRefObject, useEffect, useRef } from 'react'
 import { api, type FileData, type SyncStatus } from '../api'
-import { setTheme } from '../editor/livePreview'
-import { editorExtensions, externalChange, wrapping } from '../editor/setup'
+import { openSearchPanel } from '@codemirror/search'
+import { copyMarkdown } from '../editor/copy'
+import { openReplace } from '../editor/searchPanel'
+import { livePreview, openDoc, setTheme } from '../editor/livePreview'
+import { editorExtensions, externalChange, previewing, wrapping } from '../editor/setup'
 import type { Theme } from '../editor/widgets'
 import type { T } from '../i18n'
 
@@ -16,6 +19,8 @@ interface Props {
   /** Changes when font/size/spacing change, so the editor re-measures its lines. */
   layoutKey: string
   wrap: boolean
+  /** Visual view (rendered) or the Markdown source; defaults to visual. */
+  visual?: boolean
   theme: Theme
   /** Bumped whenever the server reports a change to this file. */
   externalTick: number
@@ -32,6 +37,8 @@ interface Props {
   readOnly?: boolean
   /** Signs new comments; null or missing turns comment creation off. */
   author?: string | null
+  /** Opens a project document: where clicking a relative link to a `.md` file goes. */
+  onOpenDoc?: (path: string) => void
 }
 
 export interface EditHistory {
@@ -44,6 +51,10 @@ export interface EditorCommands {
   undo: () => void
   redo: () => void
   discard: () => void
+  /** Open the find panel, or find and replace. */
+  find: (replace?: boolean) => void
+  /** Copy the selection, or the whole document, as Markdown or as formatted text. */
+  copy: (formatted: boolean) => Promise<void>
   /** Set a frontmatter field (e.g. a proposal's status), as one undoable change. */
   setField: (key: string, value: string) => void
 }
@@ -73,7 +84,7 @@ function revertChanges(state: EditorState): ChangeSet {
   return changes
 }
 
-export function Editor({ path, lang, t, layoutKey, wrap, theme, externalTick, onLoaded, onSaving, onSaved, onHistory, commands, io, readOnly, author = null }: Props) {
+export function Editor({ path, lang, t, layoutKey, wrap, visual = true, theme, externalTick, onLoaded, onSaving, onSaved, onHistory, commands, io, readOnly, author = null, onOpenDoc }: Props) {
   const host = useRef<HTMLDivElement>(null)
   const view = useRef<EditorView | null>(null)
   const file = useRef<FileData | null>(null)
@@ -83,8 +94,8 @@ export function Editor({ path, lang, t, layoutKey, wrap, theme, externalTick, on
   const editSeq = useRef(0)
   /** Contents we wrote ourselves: the watcher echoes them back and they must not reload. */
   const ownWrites = useRef<string[]>([])
-  const callbacks = useRef({ onLoaded, onSaving, onSaved, onHistory })
-  callbacks.current = { onLoaded, onSaving, onSaved, onHistory }
+  const callbacks = useRef({ onLoaded, onSaving, onSaved, onHistory, onOpenDoc })
+  callbacks.current = { onLoaded, onSaving, onSaved, onHistory, onOpenDoc }
   const load = () => (io ? io.load() : api.file(path, lang))
   const historyKey = useRef('')
   const reportHistory = (state: EditorState | null) => {
@@ -120,7 +131,7 @@ export function Editor({ path, lang, t, layoutKey, wrap, theme, externalTick, on
         state: EditorState.create({
           doc: data.content,
           extensions: [
-            editorExtensions(t, path, wrap, readOnly ? null : author, (text) => {
+            editorExtensions(t, path, wrap, visual, readOnly ? null : author, (text) => {
               pending.current = text
               editSeq.current++
               callbacks.current.onSaving(true)
@@ -128,6 +139,7 @@ export function Editor({ path, lang, t, layoutKey, wrap, theme, externalTick, on
               timer.current = window.setTimeout(flush, 400)
             }),
             EditorView.updateListener.of((u) => reportHistory(u.state)),
+            openDoc.of((p) => callbacks.current.onOpenDoc?.(p)),
             readOnly ? [EditorState.readOnly.of(true), EditorState.changeFilter.of(() => false)] : [],
           ],
         }),
@@ -140,6 +152,15 @@ export function Editor({ path, lang, t, layoutKey, wrap, theme, externalTick, on
         discard: () => {
           const changes = revertChanges(v.state)
           if (!changes.empty) v.dispatch({ changes, annotations: isolateHistory.of('full'), scrollIntoView: true })
+        },
+        find: (replace) => {
+          if (replace) openReplace(v)
+          else openSearchPanel(v)
+        },
+        copy: (formatted) => {
+          const { from, to } = v.state.selection.main
+          const whole = from === to
+          return copyMarkdown(whole ? v.state.doc.toString() : v.state.sliceDoc(from, to), formatted, whole || from === 0)
         },
         setField: (key, value) => {
           const change = fieldChange(v.state.doc.toString(), key, value)
@@ -182,6 +203,14 @@ export function Editor({ path, lang, t, layoutKey, wrap, theme, externalTick, on
   useEffect(() => {
     view.current?.dispatch({ effects: wrapping.reconfigure(wrap ? EditorView.lineWrapping : []) })
   }, [wrap])
+
+  // Switching views changes every block's height: keep the block at the top of the screen at the top.
+  useEffect(() => {
+    const v = view.current
+    if (!v) return
+    const top = v.scrollDOM.scrollTop > 0 ? v.lineBlockAtHeight(v.scrollDOM.getBoundingClientRect().top - v.documentTop).from : null
+    v.dispatch({ effects: [previewing.reconfigure(visual ? livePreview : []), ...(top === null ? [] : [EditorView.scrollIntoView(top, { y: 'start', yMargin: 0 })])] })
+  }, [visual])
 
   useEffect(() => {
     view.current?.dispatch({ effects: setTheme.of(theme) })

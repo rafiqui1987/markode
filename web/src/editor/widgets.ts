@@ -1,4 +1,6 @@
+import { StateEffect } from '@codemirror/state'
 import { type EditorView, WidgetType } from '@codemirror/view'
+import { createElement, EyeOff, Globe, type IconNode, Tag } from 'lucide'
 import type { T } from '../i18n'
 import { parseTable, serializeTable, tableRangeAt, type TableModel } from './table'
 import { toggleTaskAt } from './comments'
@@ -8,10 +10,13 @@ export function setWidgetTranslate(t: T) {
   translate = t
 }
 
-/** Move the cursor into the widget's source so it switches back to raw Markdown. */
+/** Show the Markdown source of the element at this position until the cursor leaves it (see livePreview). */
+export const showSource = StateEffect.define<number>()
+
+/** Show the widget's source and move the cursor into it. */
 function revealSource(view: EditorView, dom: HTMLElement) {
   const pos = view.posAtDOM(dom)
-  view.dispatch({ selection: { anchor: Math.min(pos + 3, view.state.doc.length) } })
+  view.dispatch({ effects: showSource.of(pos), selection: { anchor: Math.min(pos + 3, view.state.doc.length) } })
   view.focus()
 }
 
@@ -59,7 +64,8 @@ function clickToReveal(view: EditorView, dom: HTMLElement) {
   dom.addEventListener('mousedown', (e) => {
     if (e.button !== 0) return
     e.preventDefault()
-    view.dispatch({ selection: { anchor: view.posAtDOM(dom) } })
+    const pos = view.posAtDOM(dom)
+    view.dispatch({ effects: showSource.of(pos), selection: { anchor: pos } })
     view.focus()
   })
 }
@@ -398,7 +404,7 @@ export class TreeWidget extends WidgetType {
 let closeMenu: (() => void) | null = null
 
 /** A small context menu at the pointer; closes on outside click, Escape, scroll or blur. */
-function showMenu(x: number, y: number, items: { label: string; run: () => void }[]) {
+export function showMenu(x: number, y: number, items: { label: string; run: () => void }[]) {
   closeMenu?.()
   const menu = document.createElement('div')
   menu.className = 'cm-slash-menu cm-context-menu'
@@ -748,6 +754,77 @@ export class RuleWidget extends WidgetType {
   toDOM() {
     const s = document.createElement('span')
     s.className = 'cm-hr'
+    return s
+  }
+}
+
+// ---------------------------------------------------------------- HTML comments
+
+function icon(node: IconNode) {
+  return createElement(node, { width: 13, height: 13, 'stroke-width': 1.75 } as any)
+}
+
+/**
+ * A note in an HTML comment (`<!-- … -->`): hidden when the Markdown is rendered elsewhere, but read by
+ * agents. A subtle icon that shows the text on hover; a click shows the comment to edit it.
+ */
+export class NoteWidget extends WidgetType {
+  constructor(readonly text: string) {
+    super()
+  }
+  eq(other: NoteWidget) {
+    return other.text === this.text
+  }
+  toDOM(view: EditorView) {
+    const s = document.createElement('span')
+    s.className = 'cm-note'
+    s.title = `${translate('comment.note')}\n\n${this.text}`
+    s.append(icon(EyeOff))
+    clickToReveal(view, s)
+    return s
+  }
+}
+
+/** A marker a tool reads (`<!-- markode:source-lang:es -->`, `<!-- rule:pnpm-only -->`): a small chip. */
+export class MarkerWidget extends WidgetType {
+  constructor(
+    readonly label: string,
+    readonly title: string,
+    readonly lang: boolean,
+  ) {
+    super()
+  }
+  eq(other: MarkerWidget) {
+    return other.label === this.label && other.title === this.title
+  }
+  toDOM(view: EditorView) {
+    const s = document.createElement('span')
+    s.className = this.lang ? 'cm-marker cm-marker-chip' : 'cm-marker'
+    s.title = this.title
+    s.append(icon(this.lang ? Globe : Tag))
+    if (this.lang) s.append(this.label)
+    clickToReveal(view, s)
+    return s
+  }
+}
+
+/** The start of a region a tool manages (`<!-- markode:rules:start -->`): its label, opening a bracket. */
+export class RegionStartWidget extends WidgetType {
+  constructor(
+    readonly label: string,
+    readonly title: string,
+  ) {
+    super()
+  }
+  eq(other: RegionStartWidget) {
+    return other.label === this.label && other.title === this.title
+  }
+  toDOM(view: EditorView) {
+    const s = document.createElement('span')
+    s.className = 'cm-region-label'
+    s.textContent = this.label
+    s.title = this.title
+    clickToReveal(view, s)
     return s
   }
 }

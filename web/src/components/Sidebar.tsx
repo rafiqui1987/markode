@@ -268,14 +268,17 @@ export function Sidebar(props: Props) {
           </button>
           {menu.node && (
             <>
-              <button
-                onClick={() => {
-                  props.onIgnore(menu.node!, !menu.node!.ignored)
-                  setMenu(null)
-                }}
-              >
-                {menu.node.ignored ? <Eye size={14} /> : <EyeOff size={14} />} {menu.node.ignored ? t('app.unignore') : t('app.ignore')}
-              </button>
+              {/* Applied proposals stay ignored: they are kept only to look back at. */}
+              {!menu.node.archived && (
+                <button
+                  onClick={() => {
+                    props.onIgnore(menu.node!, !menu.node!.ignored)
+                    setMenu(null)
+                  }}
+                >
+                  {menu.node.ignored ? <Eye size={14} /> : <EyeOff size={14} />} {menu.node.ignored ? t('app.unignore') : t('app.ignore')}
+                </button>
+              )}
               <button
                 onClick={() => {
                   navigator.clipboard?.writeText(menu.node!.path)

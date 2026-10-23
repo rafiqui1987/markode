@@ -1,9 +1,10 @@
-import { Check, ChevronRight, Copy, FileText, GitCompare, LayoutDashboard, Moon, PanelLeftClose, PanelLeftOpen, Redo2, RotateCcw, ScrollText, Settings as SettingsIcon, Sparkles, Sun, Undo2 } from 'lucide-react'
+import { Check, ChevronRight, Copy, Eye, FileCode, FileText, GitCompare, LayoutDashboard, Moon, PanelLeftClose, PanelLeftOpen, Redo2, RotateCcw, ScrollText, Search, Settings as SettingsIcon, Sparkles, Sun, Undo2 } from 'lucide-react'
 import { type CSSProperties, type PointerEvent as ReactPointerEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { api, type EditorSettings, type ProposalLayout, type FileData, type Info, type Lang, LANG_NAMES, type SyncStatus, subscribe, type TreeData, type TreeNode } from './api'
+import { api, type EditorSettings, type Feature, type ProposalLayout, type FileData, type Info, type Lang, LANG_NAMES, type SyncStatus, subscribe, type TreeData, type TreeNode } from './api'
 import { type EditHistory, Editor, type EditorCommands, NO_HISTORY } from './components/Editor'
 import { Changes, Dashboard, ProposalBanner, Rules, StatusChip } from './components/Pages'
 import { applySettings, DEFAULT_SETTINGS, Settings, type SettingsSection, type Theme } from './components/Settings'
+import { showMenu } from './editor/widgets'
 import { Sidebar } from './components/Sidebar'
 import { Skills } from './components/Skills'
 import { makeT } from './i18n'
@@ -89,8 +90,25 @@ export function App() {
   const [listening, setListening] = useState(false)
   const [pendingTranslations, setPendingTranslations] = useState(0)
   const [copiedTranslate, setCopiedTranslate] = useState(false)
+  const [copiedDoc, setCopiedDoc] = useState(false)
+  /** The file shown as Markdown source, if any: opening a file always shows the markode view. */
+  const [markdownFile, setMarkdownFile] = useState<string | null>(null)
+  const markdownView = !!selected && markdownFile === selected
   const [editHistory, setEditHistory] = useState<EditHistory>(NO_HISTORY)
   const editorCommands = useRef<EditorCommands | null>(null)
+  // Ctrl+F / Ctrl+H open the editor's find panel even when the focus is outside the editor (which
+  // handles them itself when focused), instead of the browser's find bar or history.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || !(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || !editorCommands.current) return
+      const key = e.key.toLowerCase()
+      if (key !== 'f' && key !== 'h') return
+      e.preventDefault()
+      editorCommands.current.find(key === 'h')
+    }
+    addEventListener('keydown', onKey)
+    return () => removeEventListener('keydown', onKey)
+  }, [])
   const [sidebarWidth, setSidebarWidth] = useState(() => Number(store.get('markode.sidebarWidth')) || SIDEBAR_DEFAULT)
   const [sidebarHidden, setSidebarHidden] = useState(() => store.get('markode.sidebarHidden') === '1')
   const [storedLang, setStoredLang] = useState<string | null>(() => store.get('markode.viewLang'))
@@ -196,6 +214,7 @@ export function App() {
   const open = (path: string) => {
     setSelected(path)
     setView('editor')
+    setMarkdownFile(null)
   }
 
   const setLang = (lang: string) => {
@@ -206,6 +225,12 @@ export function App() {
   const changeProposals = async (active: boolean, layout: ProposalLayout) => {
     await api.setProposals(active, layout).catch((e) => alert(e.message))
     setInfo(await api.info())
+  }
+
+  const changeFeature = async (feature: Feature, on: boolean) => {
+    await api.setFeature(feature, on).catch((e) => alert(e.message))
+    setInfo(await api.info())
+    refreshTree()
   }
 
   // Answering a proposal: mark it answered. An agent waiting on it (`markode wait`) wakes up by itself;
@@ -262,17 +287,20 @@ export function App() {
 
   const status: SyncStatus | null = file?.status ?? null
   const crumbs = selected?.split('/') ?? []
-  const commentAs = info?.proposals.active ? (info.author ?? t('comment.me')) : null
+  const commentAs = info?.features.agent ? (info.author ?? t('comment.me')) : null
   const layoutKey = `${settings.font}|${settings.size}|${settings.lineHeight}|${settings.padding}|${settings.width}`
 
   const ThemeIcon = resolvedTheme === 'light' ? Sun : Moon
-  const tabs: { id: View; icon: typeof FileText; label: string }[] = [
+  const allTabs: { id: View; icon: typeof FileText; label: string }[] = [
     { id: 'editor', icon: FileText, label: t('view.editor') },
     { id: 'dashboard', icon: LayoutDashboard, label: t('view.dashboard') },
     { id: 'changes', icon: GitCompare, label: t('view.changes') },
     { id: 'rules', icon: ScrollText, label: t('view.rules') },
     { id: 'skills', icon: Sparkles, label: t('view.skills') },
   ]
+  const tabs = allTabs.filter((tab) => !info || (tab.id !== 'dashboard' && tab.id !== 'rules' && tab.id !== 'skills') || info.features[tab.id])
+  // A tab whose module was turned off shows the editor instead.
+  const current: View = tabs.some((tab) => tab.id === view) ? view : 'editor'
 
   return (
     <div className="app" data-sidebar={sidebarHidden ? 'hidden' : undefined} style={{ '--sidebar-w': `${Math.min(sidebarWidth, sidebarMax())}px` } as CSSProperties}>
@@ -285,7 +313,7 @@ export function App() {
         </div>
         <nav className="tabs">
           {tabs.map((tab) => (
-            <button key={tab.id} className={`tab${view === tab.id ? ' active' : ''}`} onClick={() => setView(tab.id)}>
+            <button key={tab.id} className={`tab${current === tab.id ? ' active' : ''}`} onClick={() => setView(tab.id)}>
               <tab.icon size={15} /> {tab.label}
               {tab.id === 'changes' && Object.keys(data.git).length > 0 && <span className="pill">{Object.keys(data.git).length}</span>}
             </button>
@@ -322,7 +350,7 @@ export function App() {
         git={data.git}
         sync={data.sync}
         foreign={data.foreign}
-        selected={view === 'editor' ? selected : null}
+        selected={current === 'editor' ? selected : null}
         mainDoc={info?.mainDoc ?? null}
         showIgnored={showIgnored}
         t={t}
@@ -338,10 +366,18 @@ export function App() {
       {!sidebarHidden && <div className="sidebar-resizer" title={t('app.resizeSidebar')} onPointerDown={startResize} onDoubleClick={() => setSidebarWidth(SIDEBAR_DEFAULT)} />}
 
       <main className="main">
-        {view === 'editor' &&
+        {current === 'editor' &&
           (selected ? (
             <>
               <div className="crumbs">
+                {crumbs.map((c, i) => (
+                  <span key={i} style={{ display: 'contents' }}>
+                    {i > 0 && <ChevronRight size={13} className="sep" />}
+                    <span className={i === crumbs.length - 1 ? 'last' : ''}>{c}</span>
+                  </span>
+                ))}
+                {file && <span className="status"><StatusChip status={statusOf(file.content)} t={t} /></span>}
+                <span className="save">{saving ? t('app.saving') : file ? t('app.saved') : ''}</span>
                 <div className="edit-actions">
                   {/* preventDefault keeps the focus (and the selection) in the editor. */}
                   <button className="icon-btn" title={t('app.undo')} disabled={!editHistory.undo} onMouseDown={(e) => e.preventDefault()} onClick={() => editorCommands.current?.undo()}>
@@ -353,15 +389,43 @@ export function App() {
                   <button className="icon-btn" title={t('app.discard')} disabled={!editHistory.dirty} onMouseDown={(e) => e.preventDefault()} onClick={() => editorCommands.current?.discard()}>
                     <RotateCcw size={15} />
                   </button>
+                  <span className="sep" />
+                  <button className="icon-btn" title={t('app.find')} onMouseDown={(e) => e.preventDefault()} onClick={() => editorCommands.current?.find()}>
+                    <Search size={15} />
+                  </button>
+                  <button
+                    className="icon-btn"
+                    title={t('app.copyDoc')}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={(e) => {
+                      const r = e.currentTarget.getBoundingClientRect()
+                      const copy = (formatted: boolean) => () =>
+                        editorCommands.current
+                          ?.copy(formatted)
+                          .then(() => {
+                            setCopiedDoc(true)
+                            setTimeout(() => setCopiedDoc(false), 1200)
+                          })
+                          .catch((err) => alert(err.message))
+                      showMenu(r.left, r.bottom + 4, [
+                        { label: t('app.copyMarkdown'), run: copy(false) },
+                        { label: t('app.copyFormatted'), run: copy(true) },
+                      ])
+                    }}
+                  >
+                    {copiedDoc ? <Check size={15} /> : <Copy size={15} />}
+                  </button>
+                  <span className="sep" />
+                  {/* Like the theme button: the icon is the current view, the title says what a click does. */}
+                  <button
+                    className="icon-btn"
+                    title={markdownView ? t('app.viewVisual') : t('app.viewMarkdown')}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => setMarkdownFile(markdownView ? null : selected)}
+                  >
+                    {markdownView ? <FileCode size={15} /> : <Eye size={15} />}
+                  </button>
                 </div>
-                {crumbs.map((c, i) => (
-                  <span key={i} style={{ display: 'contents' }}>
-                    {i > 0 && <ChevronRight size={13} className="sep" />}
-                    <span className={i === crumbs.length - 1 ? 'last' : ''}>{c}</span>
-                  </span>
-                ))}
-                {file && <span className="status"><StatusChip status={statusOf(file.content)} t={t} /></span>}
-                <span className="save">{saving ? t('app.saving') : file ? t('app.saved') : ''}</span>
               </div>
               {file && fieldOf(file.content, 'type') === 'proposal' && (
                 <ProposalBanner status={statusOf(file.content) !== 'applied' && answered === selected ? 'answered' : statusOf(file.content)} copied={answered === selected} listening={answered === selected && listening} affects={affectsOf(file.content)} t={t} onSend={sendAnswer} onOpen={open} />
@@ -391,6 +455,7 @@ export function App() {
                 lang={viewLang}
                 layoutKey={layoutKey}
                 wrap={settings.wrap}
+                visual={!markdownView}
                 theme={resolvedTheme}
                 t={t}
                 externalTick={fileTick}
@@ -398,6 +463,7 @@ export function App() {
                 onHistory={setEditHistory}
                 commands={editorCommands}
                 author={commentAs}
+                onOpenDoc={open}
                 onSaving={setSaving}
                 onSaved={(s) => {
                   setFile((f) => (f ? { ...f, status: s } : f))
@@ -408,13 +474,13 @@ export function App() {
           ) : (
             <div className="empty">{t('app.noFile')}</div>
           ))}
-        {view === 'dashboard' && (
+        {current === 'dashboard' && (
           <Dashboard
             t={t}
             tick={tick}
             onOpen={open}
             proposalsActive={!!info?.proposals.active}
-            onActivateProposals={() => setSettingsOpen('proposals')}
+            onActivateProposals={() => setSettingsOpen('features')}
             unlinked={info?.unlinked ?? []}
             onLink={async (skip) => {
               await api.link(skip).catch((e) => alert(e.message))
@@ -423,12 +489,12 @@ export function App() {
             }}
           />
         )}
-        {view === 'changes' && <Changes t={t} git={data.git} enabled={!!info?.git} tick={tick} />}
-        {view === 'rules' && <Rules t={t} />}
-        {view === 'skills' && <Skills t={t} tick={tick} look={{ layoutKey, wrap: settings.wrap, theme: resolvedTheme }} />}
+        {current === 'changes' && <Changes t={t} git={data.git} enabled={!!info?.git} tick={tick} />}
+        {current === 'rules' && <Rules t={t} />}
+        {current === 'skills' && <Skills t={t} tick={tick} look={{ layoutKey, wrap: settings.wrap, theme: resolvedTheme }} />}
       </main>
 
-      {settingsOpen && info && <Settings t={t} section={settingsOpen} pendingTranslations={pendingTranslations} theme={theme} onTheme={setTheme} info={info} settings={settings} onSettings={changeSettings} onLanguages={changeLanguages} onProposals={changeProposals} onClose={() => setSettingsOpen(null)} />}
+      {settingsOpen && info && <Settings t={t} section={settingsOpen} pendingTranslations={pendingTranslations} theme={theme} onTheme={setTheme} info={info} settings={settings} onSettings={changeSettings} onLanguages={changeLanguages} onProposals={changeProposals} onFeature={changeFeature} onClose={() => setSettingsOpen(null)} />}
     </div>
   )
 }
