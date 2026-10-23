@@ -40,7 +40,8 @@
     "dev": "concurrently -k -n server,web -c blue,magenta \"tsx watch src/cli/index.ts serve --port 4319 --no-open\" \"vite\"",
     "build": "vite build && tsup",
     "typecheck": "tsc --noEmit",
-    "start": "node dist/cli.js"
+    "start": "node dist/cli.js",
+    "sandbox": "node scripts/sandbox.mjs"
   },
   "engines": {
     "node": ">=20"
