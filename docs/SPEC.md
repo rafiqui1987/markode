@@ -63,6 +63,17 @@ task's status lives only in its frontmatter (no task index).
 markode keeps its state in `.markode/`, which ignores itself in git (`.markode/.gitignore`). When the
 editor starts, the skills and sections markode installed are refreshed to the running version.
 
+### Skills tab
+
+Lists the user's global skills (`~/.claude/skills`, `~/.agents/skills`, `~/.codex/skills`,
+`~/.gemini/skills`, `~/.copilot/skills`, `~/.cursor/skills`). For each kind of agent the project uses
+(`claude`: Claude Code, which reads only `~/.claude/skills` and `.claude/skills/`; `agents`: the others,
+through `.agents/skills/`), each skill shows its status: `global` (active everywhere, nothing to do;
+copying it only shares it with the team), `missing` (another agent's: copy it to use it), `project`, or
+`both` (two copies; Claude Code runs the personal one, the team gets the project one). A project copy
+whose `SKILL.md` differs from the global one is flagged, with an update from the global one. Nothing
+is copied without the user asking.
+
 ## 3. Rule presets
 
 Reusable rules describing *how I work*, selectable on every init.

@@ -1,6 +1,6 @@
-import { AlertTriangle, ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, FolderDown, Lock, Plus, Search, X } from 'lucide-react'
+import { AlertTriangle, ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, FolderDown, Lock, Plus, RefreshCw, Search, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { api, type ProjectTarget, type Skill, type SkillSource, type SkillsData } from '../api'
+import { api, type ProjectTarget, type Skill, type SkillSource, type SkillsData, type SkillStatus } from '../api'
 import type { Theme } from '../editor/widgets'
 import type { T, TKey } from '../i18n'
 import { Editor, type EditorCommands } from './Editor'
@@ -10,6 +10,9 @@ type GroupBy = 'tag' | 'source'
 const SOURCES: SkillSource[] = ['claude', 'agents', 'codex', 'gemini', 'copilot', 'cursor']
 const TARGETS: ProjectTarget[] = ['claude', 'agents']
 const GROUP_KEY = 'markode.skillsGroupBy'
+
+/** How each status reads on a card; `ok` needs nothing, `warn` asks for a look. */
+const STATUS_TONE: Record<SkillStatus, string> = { global: 'ok', project: 'ok', both: 'warn', missing: 'off' }
 
 const sourceLabel = (s: SkillSource, t: T) => (s === 'agents' ? t('skills.shared') : { claude: 'Claude', codex: 'Codex', gemini: 'Gemini', copilot: 'Copilot', cursor: 'Cursor' }[s])
 
@@ -160,11 +163,16 @@ function SkillCard({ skill, t, look, open, onToggle, allTags, onTags, defaultTar
   const [adding, setAdding] = useState(false)
   const [installing, setInstalling] = useState(false)
   const [targets, setTargets] = useState<ProjectTarget[]>(skill.installed.length ? skill.installed : defaultTargets)
+  /** Every agent of the project already has it from the global folder: copying it only shares it with the team. */
+  const statuses = Object.values(skill.status)
+  const allGlobal = statuses.length > 0 && statuses.every((st) => st === 'global')
+  /** The one agent of the project can't see it yet: the button says what copying it does. */
+  const onlyMissing = statuses.length === 1 && statuses[0] === 'missing' ? (Object.keys(skill.status)[0] as ProjectTarget) : null
 
-  const install = async () => {
-    const replacing = targets.filter((x) => skill.installed.includes(x))
-    if (replacing.length && !confirm(t('skills.overwrite', { name: skill.folder, dirs: replacing.map((x) => t(`skills.target.${x}` as TKey)).join(', ') }))) return
-    const ok = await api.installSkill(skill.key, targets, replacing.length > 0).then(
+  const install = async (to = targets, ask = true) => {
+    const replacing = to.filter((x) => skill.installed.includes(x))
+    if (ask && replacing.length && !confirm(t('skills.overwrite', { name: skill.folder, dirs: replacing.map((x) => t(`skills.target.${x}` as TKey)).join(', ') }))) return
+    const ok = await api.installSkill(skill.key, to, replacing.length > 0).then(
       () => true,
       (e) => (alert(e.message), false),
     )
@@ -194,19 +202,35 @@ function SkillCard({ skill, t, look, open, onToggle, allTags, onTags, defaultTar
           </span>
         )}
         <span className="spacer" />
-        {!!skill.installed.length && (
-          <span className="pill" title={skill.installed.map((x) => t(`skills.target.${x}` as TKey)).join('\n')}>
-            {t('skills.inProject')}
-          </span>
+        {(Object.entries(skill.status) as [ProjectTarget, SkillStatus][]).map(([x, st]) => {
+          const agent = t(`skills.agent.${x}` as TKey)
+          return (
+            <span key={x} className={`st-chip ${STATUS_TONE[st]}`} title={t(`skills.st.${st}Hint${st === 'both' && x === 'claude' ? 'Claude' : ''}` as TKey, { agent })}>
+              {t(`skills.st.${st}` as TKey, { agent })}
+            </span>
+          )
+        })}
+        {skill.differs.length > 0 && (
+          <button
+            className="st-chip warn"
+            title={t('skills.differsHint', { dirs: skill.differs.map((x) => t(`skills.target.${x}` as TKey)).join(', ') })}
+            onClick={(e) => {
+              e.stopPropagation()
+              if (confirm(t('skills.updateConfirm', { name: skill.folder }))) install(skill.differs, false)
+            }}
+          >
+            <RefreshCw size={11} /> {t('skills.differs')}
+          </button>
         )}
         <button
           className="btn small"
+          title={allGlobal ? t('skills.shareHint') : undefined}
           onClick={(e) => {
             e.stopPropagation()
             setInstalling((v) => !v)
           }}
         >
-          <FolderDown size={13} /> {t('skills.install')}
+          <FolderDown size={13} /> {allGlobal ? t('skills.share') : onlyMissing ? t('skills.useWith', { agent: t(`skills.agent.${onlyMissing}` as TKey) }) : t('skills.install')}
         </button>
       </div>
 
@@ -220,7 +244,7 @@ function SkillCard({ skill, t, look, open, onToggle, allTags, onTags, defaultTar
             </label>
           ))}
           <span className="spacer" />
-          <button className="btn small primary" disabled={!targets.length} onClick={install}>
+          <button className="btn small primary" disabled={!targets.length} onClick={() => install()}>
             {t('skills.copy')}
           </button>
           <button className="btn small" onClick={() => setInstalling(false)}>

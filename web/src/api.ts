@@ -94,7 +94,14 @@ export interface Skill {
   tags: string[]
   issues: SkillIssue[]
   installed: ProjectTarget[]
+  /** For each kind of agent the project uses: whether it can use the skill here, and from where. */
+  status: Partial<Record<ProjectTarget, SkillStatus>>
+  /** Project copies whose SKILL.md differs from the global one. */
+  differs: ProjectTarget[]
 }
+
+/** global: active everywhere, nothing to do · project: shared with the team · both: two copies · missing: another agent's. */
+export type SkillStatus = 'global' | 'project' | 'both' | 'missing'
 
 export interface SkillsData {
   skills: Skill[]

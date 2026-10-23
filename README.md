@@ -315,13 +315,28 @@ agents check as their skill tells them):
 - a comment on what it is working on: it replies below it and applies it;
 - a comment on anything else: it asks you in one line whether to take it now.
 
-### 10. Your AI agent's skills
+### 10. Your AI agent's skills, and which ones this project really has
 
-The **Skills** tab lists every global skill you have for Claude Code, Codex, Gemini, Copilot or Cursor
-([Agent Skills](https://agentskills.io) format). Tag them to group them, expand one to read or edit its
-`SKILL.md`, see problems that would stop an agent from loading it, and **add it to the current project**
-(`.claude/skills/` and/or `.agents/skills/`). Tags are stored in `~/.markode/skills.json`, never in the
-skill.
+Skills teach an agent how to do a job: deploy, review a pull request, write a changelog. They pile up
+in many places: your own for Claude Code (`~/.claude/skills`), for Codex, Gemini, Copilot or Cursor,
+the shared `~/.agents/skills`, and each project's `.claude/skills/` or `.agents/skills/`. It is hard to
+know what an agent can actually use in a given project, and copying skills around "just in case"
+duplicates them, lets copies go stale, and costs context in every session.
+
+The **Skills** tab lists every global skill you have ([Agent Skills](https://agentskills.io) format)
+and tells you, for the agents this project uses, where each one stands:
+
+| Status | What it means | What to do |
+|---|---|---|
+| **Active for Claude (global)** | Claude Code already uses it in every project. | Nothing. **Share with the team** copies it into the repository only if your teammates (or CI) need it too. |
+| **Not visible to Claude** | It belongs to another agent (e.g. a Codex skill): Claude can't use it here. | **Use with Claude** copies it into `.claude/skills/`. Review it after: it may mention that agent's commands. |
+| **In the project** | Copied into this project: every clone has it. | Nothing. |
+| **Global and in the project** | Two copies. On your machine Claude Code runs your global one (a personal skill wins over a project skill with the same name); the team gets the project one. | Keep the project copy only to share it. |
+| **Project copy differs** | The project's `SKILL.md` is not the same as your global one. | Click to update it from the global one, or keep the project's version on purpose. |
+
+You can also tag skills to group them (tags live in `~/.markode/skills.json`, never in the skill),
+read and edit a `SKILL.md` in place, and see problems that would stop an agent from loading it (a
+missing description, a name that doesn't match its folder…).
 
 ### 11. Also included
 

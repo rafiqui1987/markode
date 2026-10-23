@@ -48,7 +48,21 @@ export interface Skill {
   issues: SkillIssue[]
   /** Project folders that already have a skill with this name. */
   installed: ProjectTarget[]
+  /** For each kind of agent the project uses: can it use this skill here, and from where (see skillStatus). */
+  status: Partial<Record<ProjectTarget, SkillStatus>>
+  /** Project copies whose SKILL.md is not the same as the global one (edited, or older). */
+  differs: ProjectTarget[]
 }
+
+/**
+ * Whether the agents of a project target can use a skill there: from the user's global folder (active in
+ * every project, nothing to do), from the project (shared with the team through git), from both (two
+ * copies of the same skill), or not at all (it belongs to another agent).
+ */
+export type SkillStatus = 'global' | 'project' | 'both' | 'missing'
+
+/** Global folders each project target's agents read: Claude Code only its own; the others theirs and the shared one. */
+const READS: Record<ProjectTarget, SkillSource[]> = { claude: ['claude'], agents: ['agents', 'codex', 'gemini', 'copilot', 'cursor'] }
 
 export type SkillIssue = 'frontmatter' | 'name' | 'name-dir' | 'description' | 'description-long'
 
@@ -144,6 +158,7 @@ export function listSkills(root: string): Skill[] {
     for (const f of findSkills(sourceDir(source), source, false)) byReal.set(f.real, [...(byReal.get(f.real) ?? []), f])
   }
   const userTags = readTags()
+  const used = projectTargets(root)
   const skills: Skill[] = []
   for (const [real, found] of byReal) {
     const text = fs.readFileSync(path.join(real, 'SKILL.md'), 'utf8')
@@ -159,6 +174,7 @@ export function listSkills(root: string): Skill[] {
       if (!description) issues.push('description')
       else if (description.length > 1024) issues.push('description-long')
     }
+    const installed = (Object.keys(PROJECT_TARGETS) as ProjectTarget[]).filter((t) => fs.existsSync(path.join(root, PROJECT_TARGETS[t], folder, 'SKILL.md')))
     const declared = fm?.metadata?.tags
     const metaTags = Array.isArray(declared) ? declared.map(String) : typeof declared === 'string' ? declared.split(',') : []
     skills.push({
@@ -171,7 +187,21 @@ export function listSkills(root: string): Skill[] {
       files: listFiles(real),
       tags: [...new Set([...(userTags[name] ?? []), ...metaTags.map((t) => t.trim().toLowerCase()).filter(Boolean)])],
       issues,
-      installed: (Object.keys(PROJECT_TARGETS) as ProjectTarget[]).filter((t) => fs.existsSync(path.join(root, PROJECT_TARGETS[t], folder, 'SKILL.md'))),
+      installed,
+      status: Object.fromEntries(
+        used.map((t) => {
+          const global = found.some((f) => READS[t].includes(f.source))
+          const local = installed.includes(t)
+          return [t, global && local ? 'both' : global ? 'global' : local ? 'project' : 'missing']
+        }),
+      ),
+      differs: installed.filter((t) => {
+        try {
+          return fs.readFileSync(path.join(root, PROJECT_TARGETS[t], folder, 'SKILL.md'), 'utf8') !== text
+        } catch {
+          return false
+        }
+      }),
     })
   }
   return skills.sort((a, b) => a.name.localeCompare(b.name))
