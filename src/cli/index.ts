@@ -203,7 +203,7 @@ function stop() {
 /** Install the version just published: pnpm and npm can hold back releases younger than a day. */
 async function update() {
   const latest = await latestVersion()
-  if (!isNewer(latest, CURRENT_VERSION)) return console.log(`markode ${CURRENT_VERSION} is the latest version.`)
+  if (!isNewer(latest, CURRENT_VERSION)) return console.log(`markode ${CURRENT_VERSION} is the latest version (one published in the last minutes may not show yet).`)
   console.log(`markode ${latest} is out (you have ${CURRENT_VERSION}).`)
   if (flag('--check')) return
   const via = flag('--pnpm') ? 'pnpm' : flag('--npm') ? 'npm' : installer()

@@ -22,11 +22,18 @@ export function installer(): Installer | null {
   return dir.includes('/pnpm/') || dir.includes('/.pnpm/') ? 'pnpm' : 'npm'
 }
 
-/** The version under the `latest` tag, straight from the registry (no cache, no minimum age). */
+/**
+ * The version under the `latest` tag, straight from the registry (no cache, no minimum age). Read from
+ * the document pnpm and npm install from: right after a publish, `/<name>/latest` can show a version
+ * that document doesn't list yet, and the install would fail.
+ */
 export async function latestVersion(): Promise<string> {
-  const res = await fetch(`https://registry.npmjs.org/${PKG.name}/latest`, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(15_000) })
+  const res = await fetch(`https://registry.npmjs.org/${PKG.name}`, {
+    headers: { accept: 'application/vnd.npm.install-v1+json', 'cache-control': 'no-cache' },
+    signal: AbortSignal.timeout(15_000),
+  })
   if (!res.ok) throw new Error(`The npm registry answered ${res.status}`)
-  return ((await res.json()) as { version: string }).version
+  return ((await res.json()) as { 'dist-tags': { latest: string } })['dist-tags'].latest
 }
 
 /** a > b for plain x.y.z versions. */
