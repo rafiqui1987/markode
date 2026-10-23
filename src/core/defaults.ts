@@ -1,41 +1,37 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { GLOBAL_DIR, isLang, type Lang, MAIN_DOCS } from './config.js'
-import type { SddAgent, Workflow } from './sdd.js'
+import { type Feature, isFeature, PROFILE_FEATURES } from './features.js'
 
 /**
- * How `markode` sets up a new project: with answers the user gave once (`markode setup`), or asking
- * in each project. Global, per user; a project can still be set up by hand with `init --custom`.
+ * How `markode` sets up a new project: with the modules the user chose once (`markode setup`), or asking
+ * which ones in each project. Global, per user; `init --custom` still asks everything for one project.
  */
 export interface SetupDefaults {
   mode: 'defaults' | 'ask'
+  /** Modules every new project gets (see core/features.ts). */
+  features: Feature[]
   /** Main doc created when a project has none, and preferred when it has both. */
   mainDoc: (typeof MAIN_DOCS)[number]
-  workflow: Workflow
-  /** Agents that get the OpenSpec or Spec Kit commands (Spec Kit uses the first one). */
-  agents: SddAgent[]
   /**
    * In a monorepo: each project gets its own main doc and docs/ (architecture, tasks, proposals) and the
    * root main doc is the overview, or a single docs/ at the root holds everything.
    */
   monorepo: 'per-project' | 'single'
-  /** Used when the project doesn't declare its source language yet. */
+  /** Used when the project doesn't declare its source language and its docs don't show one. */
   sourceLang: Lang
   rules: string[]
   rulesInSubprojects: boolean
-  hideInVsCode: boolean
 }
 
 export const BASE_DEFAULTS: SetupDefaults = {
   mode: 'ask',
+  features: PROFILE_FEATURES.agent,
   mainDoc: 'CLAUDE.md',
-  workflow: 'none',
-  agents: ['claude'],
   monorepo: 'per-project',
   sourceLang: 'en',
   rules: [],
   rulesInSubprojects: false,
-  hideInVsCode: true,
 }
 
 export const defaultsFile = () => path.join(GLOBAL_DIR, 'defaults.json')
@@ -43,10 +39,15 @@ export const defaultsFile = () => path.join(GLOBAL_DIR, 'defaults.json')
 /** The saved defaults, or null if the user hasn't chosen how to set up projects yet. */
 export function readDefaults(): SetupDefaults | null {
   try {
-    const saved = { ...BASE_DEFAULTS, ...JSON.parse(fs.readFileSync(defaultsFile(), 'utf8')) } as SetupDefaults
+    const raw = JSON.parse(fs.readFileSync(defaultsFile(), 'utf8'))
+    const saved = { ...BASE_DEFAULTS, ...raw } as SetupDefaults
     if (!isLang(saved.sourceLang)) saved.sourceLang = BASE_DEFAULTS.sourceLang
     if (!MAIN_DOCS.includes(saved.mainDoc)) saved.mainDoc = BASE_DEFAULTS.mainDoc
     if (saved.monorepo !== 'single') saved.monorepo = 'per-project'
+    // Before modules (0.2): the agent was always installed; the rest followed the old answers.
+    saved.features = Array.isArray(raw.features)
+      ? raw.features.filter(isFeature)
+      : PROFILE_FEATURES.agent.filter((f) => (f !== 'live' || raw.claudeHooks !== false) && (f !== 'vscode' || raw.hideInVsCode !== false)).concat(raw.workflow === 'markode' ? ['dashboard'] : [])
     return saved
   } catch {
     return null

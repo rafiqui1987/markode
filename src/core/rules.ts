@@ -101,7 +101,7 @@ function renderSection(rules: Rule[], sourceLang: Lang): string {
     START,
     '## Working rules',
     '',
-    'This project uses markode: follow `.claude/skills/markode/SKILL.md` when editing any `.md` file.',
+    'This project uses markode: follow its `markode` skill (`.claude/skills/markode/` or `.agents/skills/markode/`) when editing any `.md` file.',
     '',
     `<!-- markode:source-lang:${sourceLang} -->`,
     `- Source language of every \`.md\` file: **${LANG_NAMES[sourceLang]}** (\`${sourceLang}\`).`,

@@ -45,3 +45,17 @@ This project uses markode: follow `.claude/skills/markode/SKILL.md` when editing
 - Write prompts answers and explanations in Spanish.
 - Write code, comments, commit messages and every `.md` file in English.
 <!-- markode:rules:end -->
+
+<!-- markode:proposals:start -->
+## Proposals
+
+When an answer would be long, has options or a design to validate, or the user asks for one, write a
+temporary proposal the user answers in markode instead of a chat answer (skill: `markode-proposals`).
+
+- Where: `docs/proposals/NNN-short-name.md` (NNN: the next number in that folder, counting `applied/`).
+- After writing one, run `markode wait <path>` in the background: it returns when the user answers in markode.
+- The user ticks options and comments (`<!-- comment by … -->`). When it is answered, reply to the comments,
+  update every doc that depends on the decision (tasks, phases, architecture…), then archive the proposal:
+  `status: applied`, moved to the `applied/` folder next to it. Never read or search archived proposals
+  unless the user asks about a past one.
+<!-- markode:proposals:end -->

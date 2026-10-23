@@ -2,10 +2,10 @@ import fs from 'node:fs'
 import path from 'node:path'
 import YAML from 'yaml'
 import { contentDoc, linkAgentsDoc, TEMPLATES_DIR } from './config.js'
-import { contractsGuidance, KIND_LABEL, kindGuidance, type Profile } from './profile.js'
+import { contractsGuidance, detectProfile, existingDocs, findContracts, guessKind, KIND_LABEL, kindGuidance, looksLikeMicroservices, type Profile } from './profile.js'
 import { copyTree, fill, today } from './scaffold.js'
 import { findSubprojects, scanTree } from './scan.js'
-import { writeManagedBlock } from './sdd.js'
+import { applyWorkflowToFile, writeManagedBlock } from './sdd.js'
 
 /**
  * The markode method: a short main doc that points to docs/ (vision, architecture, phases, one file per
@@ -228,4 +228,21 @@ export function methodSection(areas: Area[], root?: string, ctx: MethodContext =
 export function installMethodSkills(root: string) {
   const src = path.join(TEMPLATES_DIR, 'method', 'skills')
   for (const name of fs.readdirSync(src)) fs.cpSync(path.join(src, name), path.join(root, '.claude', 'skills', name), { recursive: true })
+}
+
+/**
+ * Set up the method with what the project shows, without questions: its projects (in a monorepo), their
+ * kinds, its contracts and the docs it already has. Returns the files created.
+ */
+export function setupMethod(root: string, mainDoc: string, monorepo: 'per-project' | 'single'): { created: string[]; areas: Area[] } {
+  const used = new Set<string>()
+  const areas: Area[] = monorepo === 'single' ? [] : detectAreas(root).dirs.map((dir) => ({ dir, prefix: suggestPrefix(dir, used) }))
+  for (const a of areas) a.profile = detectProfile(path.join(root, a.dir), guessKind(path.join(root, a.dir)).kind)
+  const contracts = looksLikeMicroservices(root, areas.length) ? findContracts(root) : null
+  const profile = areas.length ? undefined : detectProfile(root, guessKind(root).kind)
+  const existing = existingDocs(root)
+  const created = scaffoldMethod(root, mainDoc, areas)
+  installMethodSkills(root)
+  applyWorkflowToFile(path.join(root, mainDoc), 'markode', methodSection(areas, root, { profile, contracts, existing }))
+  return { created, areas }
 }

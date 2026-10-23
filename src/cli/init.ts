@@ -2,15 +2,18 @@ import fs from 'node:fs'
 import path from 'node:path'
 import * as p from '@clack/prompts'
 import pc from 'picocolors'
-import { contentDoc, isPointer, type Lang, LANG_NAMES, LANGS, linkAgentsDoc, MAIN_DOCS, type ProjectConfig, readConfig, writeConfig } from '../core/config.js'
+import { contentDoc, isPointer, type Lang, LANG_NAMES, LANGS, linkAgentsDoc, MAIN_DOCS, mainDocOf, type ProjectConfig, readConfig, writeConfig } from '../core/config.js'
 import { BASE_DEFAULTS, defaultsFile, readDefaults, type SetupDefaults, writeDefaults } from '../core/defaults.js'
-import { appliedRuleIds, applyRulesToFile, listRules, sourceLangOf } from '../core/rules.js'
-import { type Area, detectAreas, installMethodSkills, methodSection, scaffoldMethod, suggestPrefix } from '../core/method.js'
+import { detectSourceLang, type Feature, FEATURE_INFO, FEATURES, featureState, ignoreStateDir, installAgentSkill, type InstallProfile, PROFILE_FEATURES, PROFILE_INFO, REQUIRES, withRequired } from '../core/features.js'
+import { hasClaudeHooks, installClaudeHooks } from '../core/hooks.js'
+import { type Area, detectAreas, installMethodSkills, methodSection, scaffoldMethod, setupMethod, suggestPrefix } from '../core/method.js'
 import { detectProfile, EXPERIMENTS_LABEL, type Experiments, existingDocs, findContracts, guessKind, KIND_HINT, KIND_LABEL, looksLikeMicroservices, type Profile, type ProjectKind } from '../core/profile.js'
-import { activateProposals, type ProposalLayout } from '../core/proposals.js'
-import { createMainDoc, ensureGitignore, hideInVsCode, installSkill } from '../core/scaffold.js'
-import { applyWorkflowToFile, detectWorkflow, hasUv, installWorkflow, SDD_AGENTS, type SddAgent, type Workflow } from '../core/sdd.js'
+import { activateProposals, type ProposalLayout, proposalsState } from '../core/proposals.js'
+import { appliedRuleIds, applyRulesToFile, listRules, sourceLangOf } from '../core/rules.js'
+import { createMainDoc, hideInVsCode, isHiddenInVsCode } from '../core/scaffold.js'
 import { findSubprojects, flattenFiles, scanTree } from '../core/scan.js'
+import { projectTargets } from '../core/skills.js'
+import { applyWorkflowToFile, detectWorkflow, hasUv, installWorkflow, SDD_AGENTS, type SddAgent, type Workflow } from '../core/sdd.js'
 
 function check<T>(value: T): Exclude<T, symbol> {
   if (p.isCancel(value)) {
@@ -77,7 +80,7 @@ const WORKFLOW_OPTIONS: { value: Workflow; label: string; hint?: string }[] = [
   { value: 'openspec', label: 'OpenSpec', hint: 'specs + proposed changes, good for existing projects' },
   { value: 'speckit', label: 'GitHub Spec Kit', hint: 'constitution → spec → plan → tasks, per feature' },
 ]
-const PROPOSALS_QUESTION = 'The AI can write proposals you answer by ticking options and commenting. How should they be organized?'
+const PROPOSALS_QUESTION = 'The agent can write proposals you answer by ticking options and commenting. How should they be organized?'
 const PROPOSAL_OPTIONS: { value: ProposalLayout; label: string; hint: string }[] = [
   { value: 'structured', label: 'By topic and area', hint: 'docs/proposals/auth/…, services/docs/proposals/…' },
   { value: 'general', label: 'One folder', hint: 'docs/proposals/' },
@@ -90,7 +93,6 @@ const MONOREPO_OPTIONS: { value: SetupDefaults['monorepo']; label: string; hint:
 const SOURCE_LANG_QUESTION = 'Language you work in (every .md file is written in it)'
 const SOURCE_LANG_MARK = /<!-- markode:source-lang:\w+ -->/
 const LANG_OPTIONS = LANGS.map((l) => ({ value: l, label: LANG_NAMES[l], hint: l === 'en' ? 'default' : undefined }))
-const HIDE_QUESTION = 'Hide the .markode/ folder in VS Code?'
 const ruleOptions = (rules: ReturnType<typeof listRules>) => rules.map((r) => ({ value: r.id, label: r.title, hint: r.body.split('\n')[0].replace(/^- /, '') }))
 /** Working rules: none by default (start from scratch), or picked from the user's library. */
 async function chooseRules(message: string, rules: ReturnType<typeof listRules>, initial: string[]): Promise<string[]> {
@@ -112,14 +114,15 @@ const agentOptions = () => (Object.keys(SDD_AGENTS) as SddAgent[]).map((a) => ({
 const WORKFLOW_LABEL: Record<Workflow, string> = { none: 'None', markode: 'markode', openspec: 'OpenSpec', speckit: 'GitHub Spec Kit' }
 const WORKFLOW_GUIDE: Record<Workflow, string> = { none: '', markode: '.claude/skills/markode-method/SKILL.md', openspec: 'openspec/README.md', speckit: 'specs/README.md' }
 
-/** Questions about what can't be detected are asked even with saved defaults, when there is a terminal. */
-const canAsk = () => !!process.stdin.isTTY
+/*
+ * The questions below are only asked by `init --custom`: otherwise markode uses what the project shows.
+ */
 
 /** In a monorepo, which projects get their own docs and tasks, and their task prefixes. */
-async function chooseAreas(root: string, d: SetupDefaults | null): Promise<Area[]> {
+async function chooseAreas(root: string): Promise<Area[]> {
   const { dirs: candidates, unsure } = detectAreas(root)
   if (!candidates.length) return []
-  if (unsure && canAsk()) {
+  if (unsure) {
     const separate = check(
       await p.confirm({
         message: `${candidates.map((c) => `${c}/`).join(', ')} each have their own manifest. Are they separate projects (e.g. a front end and a back end)?`,
@@ -127,10 +130,6 @@ async function chooseAreas(root: string, d: SetupDefaults | null): Promise<Area[
       }),
     )
     if (!separate) return []
-  }
-  if (d) {
-    const used = new Set<string>()
-    return d.monorepo === 'single' ? [] : candidates.map((dir) => ({ dir, prefix: suggestPrefix(dir, used) }))
   }
   p.log.info(`Monorepo detected: ${candidates.map((c) => `${c}/`).join(', ')}`)
   const layout = check(await p.select<SetupDefaults['monorepo']>({ message: MONOREPO_QUESTION, options: MONOREPO_OPTIONS }))
@@ -163,7 +162,7 @@ async function chooseAreas(root: string, d: SetupDefaults | null): Promise<Area[
 /** What kind of project `dir` is: detected, or asked when the files don't make it clear. */
 async function chooseKind(root: string, dir: string): Promise<ProjectKind> {
   const guess = guessKind(path.join(root, dir))
-  if (!guess.unclear || !canAsk()) return guess.kind
+  if (!guess.unclear) return guess.kind
   const where = dir ? `${dir}/` : 'this project'
   const seen = guess.signals.length ? `found: ${guess.signals.join(', ')}` : 'no code yet'
   return check(
@@ -175,10 +174,10 @@ async function chooseKind(root: string, dir: string): Promise<ProjectKind> {
   )
 }
 
-/** The answers a kind needs; with saved defaults, what the folder already shows. */
-async function askProfile(root: string, dir: string, kind: ProjectKind, d: SetupDefaults | null): Promise<Profile> {
+/** The answers a kind needs, starting from what the folder already shows. */
+async function askProfile(root: string, dir: string, kind: ProjectKind): Promise<Profile> {
   const base = detectProfile(path.join(root, dir), kind)
-  if (d || kind === 'app') return base
+  if (kind === 'app') return base
   const where = dir ? ` (${dir}/)` : ''
   if (kind === 'library') return { kind, published: check(await p.confirm({ message: `Is the library${where} published (npm, PyPI…)?`, initialValue: base.published })) }
   if (kind === 'mobile') {
@@ -208,10 +207,9 @@ async function askProfile(root: string, dir: string, kind: ProjectKind, d: Setup
 }
 
 /** Where a repository of services keeps its contracts; null when it doesn't look like one. */
-async function chooseContracts(root: string, areas: Area[], d: SetupDefaults | null): Promise<string | null> {
+async function chooseContracts(root: string, areas: Area[]): Promise<string | null> {
   if (!looksLikeMicroservices(root, areas.length)) return null
   const found = findContracts(root)
-  if ((d && found) || !canAsk()) return found
   const answer = check(
     await p.text({
       message: 'Several services: where do their contracts (APIs, events) live? (e.g. proto/, an OpenAPI file; empty if none)',
@@ -222,10 +220,10 @@ async function chooseContracts(root: string, areas: Area[], d: SetupDefaults | n
   return answer.trim() || null
 }
 
-/** Docs the project already had: which ones are official (with saved defaults, all of them). */
-async function chooseExisting(root: string, d: SetupDefaults | null): Promise<string[]> {
+/** Docs the project already had: which ones are official. */
+async function chooseExisting(root: string): Promise<string[]> {
   const found = existingDocs(root)
-  if (!found.length || d) return found
+  if (!found.length) return found
   return check(
     await p.multiselect({
       message: 'These docs already exist. Which are the official ones? (the agent updates them instead of creating new ones)',
@@ -236,42 +234,50 @@ async function chooseExisting(root: string, d: SetupDefaults | null): Promise<st
   )
 }
 
-/** Ask for the specs and planning structure and create it; an existing OpenSpec or Spec Kit setup is kept as is. */
-async function chooseWorkflow(root: string, mainDoc: string, previous: Workflow | undefined, d: SetupDefaults | null): Promise<{ workflow: Workflow; section?: string }> {
+/**
+ * The specs and planning structure: one the project already has (OpenSpec, Spec Kit), the markode method
+ * set up from what the project shows (`quiet`), or chosen with every question (`init --custom`).
+ */
+async function chooseWorkflow(root: string, mainDoc: string, previous: Workflow | undefined, quiet: SetupDefaults | null): Promise<Workflow> {
   const detected = detectWorkflow(root)
   if (detected) {
     p.log.info(`${WORKFLOW_LABEL[detected]} found: markode shows it in the dashboard.`)
-    return { workflow: detected }
+    return detected
+  }
+  if (previous === 'markode') return previous
+  if (quiet) {
+    const { created, areas } = setupMethod(root, mainDoc, quiet.monorepo)
+    activateProposals(root, areas.length ? 'structured' : 'general', mainDoc)
+    if (created.length) p.log.success(`Tasks structure: ${created.length} files (${created.slice(0, 5).join(', ')}${created.length > 5 ? '…' : ''})`)
+    return 'markode'
   }
   for (;;) {
-    const choice = d ? d.workflow : check(await p.select<Workflow>({ message: 'Create a base structure for specs and planning?', options: WORKFLOW_OPTIONS, initialValue: previous ?? 'none' }))
-    if (choice === 'none') return { workflow: choice }
+    const choice = check(await p.select<Workflow>({ message: 'Create a base structure for specs and planning?', options: WORKFLOW_OPTIONS, initialValue: previous ?? 'markode' }))
+    if (choice === 'none') return choice
     if (choice === 'markode') {
-      const existing = await chooseExisting(root, d)
-      const areas = await chooseAreas(root, d)
-      for (const a of areas) a.profile = await askProfile(root, a.dir, await chooseKind(root, a.dir), d)
-      const contracts = await chooseContracts(root, areas, d)
-      const profile = areas.length ? undefined : await askProfile(root, '', await chooseKind(root, ''), d)
+      const existing = await chooseExisting(root)
+      const areas = await chooseAreas(root)
+      for (const a of areas) a.profile = await askProfile(root, a.dir, await chooseKind(root, a.dir))
+      const contracts = await chooseContracts(root, areas)
+      const profile = areas.length ? undefined : await askProfile(root, '', await chooseKind(root, ''))
       const created = scaffoldMethod(root, mainDoc, areas)
       installMethodSkills(root)
+      applyWorkflowToFile(path.join(root, mainDoc), 'markode', methodSection(areas, root, { profile, contracts, existing }))
       // Proposals come with the method: per project and topic in a monorepo; a big single project may
       // still want them by topic.
       const big = !areas.length && flattenFiles(scanTree(root)).length > 40
-      const layout: ProposalLayout = areas.length ? 'structured' : !big || d ? 'general' : check(await p.select<ProposalLayout>({ message: PROPOSALS_QUESTION, options: PROPOSAL_OPTIONS }))
+      const layout: ProposalLayout = areas.length ? 'structured' : !big ? 'general' : check(await p.select<ProposalLayout>({ message: PROPOSALS_QUESTION, options: PROPOSAL_OPTIONS }))
       activateProposals(root, layout, mainDoc)
       if (created.length) p.log.success(`Created ${created.length} files: ${created.slice(0, 8).join(', ')}${created.length > 8 ? '…' : ''}`)
       p.log.info(`Docs grow when there is something to write. Skills: /markode-status, /markode-new-task, /markode-close-session.`)
-      return { workflow: choice, section: methodSection(areas, root, { profile, contracts, existing }) }
+      return choice
     }
 
     let official = true
-    if (choice === 'speckit' && !hasUv() && d) {
-      p.log.warn('Spec Kit needs uv (Python) to install its AI commands, and uv was not found: creating the structure only.')
-      official = false
-    } else if (choice === 'speckit' && !hasUv()) {
+    if (choice === 'speckit' && !hasUv()) {
       const next = check(
         await p.select({
-          message: 'Spec Kit needs uv (Python) to install its AI commands, and uv was not found.',
+          message: 'Spec Kit needs uv (Python) to install its agent commands, and uv was not found.',
           options: [
             { value: 'back', label: 'Choose another option' },
             { value: 'skeleton', label: 'Create the structure only', hint: 'the guide explains how to install Spec Kit later' },
@@ -286,11 +292,7 @@ async function chooseWorkflow(root: string, mainDoc: string, previous: Workflow 
     // Spec Kit sets up one agent at init; OpenSpec any number.
     const agents: SddAgent[] = !official
       ? [initial]
-      : d
-        ? choice === 'speckit'
-          ? [d.agents[0] ?? initial]
-          : d.agents
-        : choice === 'openspec'
+      : choice === 'openspec'
         ? check(await p.multiselect({ message: 'Install the OpenSpec commands for which agents?', options: agentOptions(), initialValues: [initial], required: false }))
         : [check(await p.select({ message: 'Install the Spec Kit commands for which agent?', options: agentOptions(), initialValue: initial }))]
 
@@ -299,79 +301,126 @@ async function chooseWorkflow(root: string, mainDoc: string, previous: Workflow 
     const res = installWorkflow(root, choice, agents, official)
     spin.stop(res.official ? `${WORKFLOW_LABEL[choice]} installed` : 'Structure created')
     if (official && !res.official) p.log.warn(`Couldn't run the ${WORKFLOW_LABEL[choice]} installer:\n${pc.dim(res.error ?? '')}\nCreated the structure only.`)
-    if (!res.official) p.log.info(`To add the AI commands later, see ${pc.cyan(WORKFLOW_GUIDE[choice])}.`)
+    if (!res.official) p.log.info(`To add the agent commands later, see ${pc.cyan(WORKFLOW_GUIDE[choice])}.`)
     if (res.ignored.length) p.log.info(`Agent commands hidden in markode (${res.ignored.length} folders); the eye button in the sidebar shows them.`)
-    return { workflow: choice }
+    return choice
   }
 }
 
-/** Set up the project: with the user's saved defaults `d`, or asking every question when null. */
-export async function runInit(root: string, d: SetupDefaults | null = null): Promise<ProjectConfig> {
+const featureOptions = () => FEATURES.map((f) => ({ value: f, label: FEATURE_INFO[f].label, hint: FEATURE_INFO[f].hint + (REQUIRES[f] ? ` (needs ${FEATURE_INFO[REQUIRES[f]!].label})` : '') }))
+
+/** Which modules to install: a profile, or each one by hand. The viewer is always there. */
+export async function askFeatures(message = 'What should markode install in this project? (the viewer is always included)', initial: Feature[] = PROFILE_FEATURES.agent): Promise<Feature[]> {
+  const same = (a: Feature[], b: Feature[]) => a.length === b.length && a.every((f) => b.includes(f))
+  const current = (Object.keys(PROFILE_FEATURES) as InstallProfile[]).find((k) => same(PROFILE_FEATURES[k], initial)) ?? 'custom'
+  const choice = check(
+    await p.select<InstallProfile | 'custom'>({
+      message,
+      options: [
+        ...(Object.keys(PROFILE_INFO) as InstallProfile[]).map((k) => ({ value: k, label: PROFILE_INFO[k].label + (k === 'agent' ? ' (recommended)' : ''), hint: PROFILE_INFO[k].hint })),
+        { value: 'custom', label: 'Choose the modules', hint: 'pick each one; any of them can be turned on or off later in Settings' },
+      ],
+      initialValue: current,
+    }),
+  )
+  if (choice !== 'custom') return PROFILE_FEATURES[choice]
+  return withRequired(check(await p.multiselect({ message: 'Modules (space to toggle)', options: featureOptions(), initialValues: initial, required: false })))
+}
+
+export interface InitPlan {
+  /** Modules to install; the ones the project already has are kept (they are turned off in Settings). */
+  features: Feature[]
+  /** Answers for what can't be detected: the user's defaults, or null to ask every question (`--custom`). */
+  defaults: SetupDefaults | null
+}
+
+/** Set up the project with the chosen modules; everything else is detected, or asked with `--custom`. */
+export async function runInit(root: string, plan: InitPlan): Promise<ProjectConfig> {
   p.intro(pc.bgCyan(pc.black(' markode ')))
-  if (d) p.log.info(`Using your defaults (${pc.cyan(defaultsFile())}). To choose differently for this project: ${pc.cyan('markode init --custom')}`)
+  const d = plan.defaults
   const previous = readConfig(root)
+  const features = withRequired(plan.features)
+  const has = (f: Feature) => features.includes(f)
+  // Before markode writes its own (English) templates, which would outvote the project's docs.
+  const detectedLang = detectSourceLang(root, d?.sourceLang ?? 'en')
+  ignoreStateDir(root)
 
-  const mainDoc = await chooseMainDoc(root, d)
-  const mainFile = path.join(root, mainDoc)
+  let mainDoc = previous?.mainDoc ?? mainDocOf(root)
+  let workflow: Workflow = previous?.workflow ?? 'none'
+  if (has('agent')) {
+    mainDoc = await chooseMainDoc(root, d)
+    const mainFile = path.join(root, mainDoc)
+    if (has('dashboard')) workflow = await chooseWorkflow(root, mainDoc, previous?.workflow, d)
+    // OpenSpec and Spec Kit get a short section on where their guide is; the method writes its own.
+    if (workflow === 'openspec' || workflow === 'speckit') applyWorkflowToFile(mainFile, workflow)
 
-  const { workflow, section } = await chooseWorkflow(root, mainDoc, previous?.workflow, d)
-  applyWorkflowToFile(mainFile, workflow, section)
+    const mainText = fs.readFileSync(mainFile, 'utf8')
+    // A language the project already declares is the team's: defaults don't override it.
+    const sourceLang = d
+      ? SOURCE_LANG_MARK.test(mainText)
+        ? sourceLangOf(mainText)
+        : detectedLang
+      : check(await p.select<Lang>({ message: SOURCE_LANG_QUESTION, options: LANG_OPTIONS, initialValue: SOURCE_LANG_MARK.test(mainText) ? sourceLangOf(mainText) : detectedLang }))
 
-  const mainText = fs.readFileSync(mainFile, 'utf8')
-  // A language the project already declares is the team's: defaults don't override it.
-  const sourceLang = d
-    ? SOURCE_LANG_MARK.test(mainText)
-      ? sourceLangOf(mainText)
-      : d.sourceLang
-    : check(await p.select<Lang>({ message: SOURCE_LANG_QUESTION, options: LANG_OPTIONS, initialValue: sourceLangOf(mainText) }))
+    const rules = listRules()
+    const applied = appliedRuleIds(mainText)
+    // Defaults add rules; they never remove the ones the project already has.
+    const selected = !has('rules') ? applied : d ? [...new Set([...applied, ...d.rules.filter((id) => rules.some((r) => r.id === id))])] : await chooseRules('Working rules for this project', rules, applied)
+    applyRulesToFile(mainFile, selected, sourceLang)
 
-  // Translations to review the docs in are added on purpose, with `markode translate`.
-  const langs = (previous?.langs ?? []).filter((l) => l !== sourceLang)
-
-  const rules = listRules()
-  const applied = appliedRuleIds(mainText)
-  // Defaults add rules; they never remove the ones the project already has.
-  const selected = d
-    ? [...new Set([...applied, ...d.rules.filter((id) => rules.some((r) => r.id === id))])]
-    : await chooseRules('Working rules for this project', rules, applied)
-  applyRulesToFile(mainFile, selected, sourceLang)
-
-  const subprojects = findSubprojects(scanTree(root))
-  if (subprojects.length && selected.length) {
-    const targets = d
-      ? d.rulesInSubprojects
-        ? subprojects
-        : []
-      : check(
-      await p.multiselect({
-        message: 'Monorepo detected. Apply the same rules to these projects too?',
-        options: subprojects.map((s) => ({ value: s, label: s })),
-        required: false,
-      }),
-    )
-    for (const dir of targets) {
-      applyRulesToFile(contentDoc(path.join(root, dir))!, selected, sourceLang)
+    const subprojects = findSubprojects(scanTree(root))
+    if (subprojects.length && selected.length) {
+      const targets = d
+        ? d.rulesInSubprojects
+          ? subprojects
+          : []
+        : check(
+            await p.multiselect({
+              message: 'Monorepo detected. Apply the same rules to these projects too?',
+              options: subprojects.map((s) => ({ value: s, label: s })),
+              required: false,
+            }),
+          )
+      for (const dir of targets) applyRulesToFile(contentDoc(path.join(root, dir))!, selected, sourceLang)
     }
-  }
 
-  ensureGitignore(root)
-  if (!previous?.initializedAt) {
-    const hide = d ? d.hideInVsCode : check(await p.confirm({ message: HIDE_QUESTION, initialValue: true }))
-    if (hide && !hideInVsCode(root)) p.log.warn('.vscode/settings.json has comments; add "**/.markode": true to files.exclude by hand.')
+    installAgentSkill(root)
+    const proposals = proposalsState(root)
+    // Refreshed when already on, so the skill and the main doc's section follow this version of markode.
+    if (has('proposals') || proposals.active) activateProposals(root, proposals.active ? proposals.layout : subprojects.length ? 'structured' : 'general', mainDoc)
+    // Only Claude Code runs hooks; other agents check `markode changes` as their skill says.
+    if (has('live') && projectTargets(root).includes('claude') && !hasClaudeHooks(root) && !installClaudeHooks(root))
+      p.log.warn('.claude/settings.local.json could not be read; add the markode hooks by hand (README: "Claude Code hooks").')
   }
-  installSkill(root)
+  if (has('vscode') && !isHiddenInVsCode(root) && !hideInVsCode(root)) p.log.warn('.vscode/settings.json has comments; add "**/.markode": true to files.exclude by hand.')
 
-  const config: ProjectConfig = { mainDoc, langs, langNames: previous?.langNames, workflow, proposals: readConfig(root)?.proposals, skipLink: previous?.skipLink, initializedAt: previous?.initializedAt ?? new Date().toISOString() }
+  // Parts of the interface: a new project gets exactly what was chosen; setting it up again only adds.
+  const flags = { ...previous?.features }
+  for (const f of ['rules', 'translations', 'dashboard', 'skills'] as const) flags[f] = has(f) || (previous?.initializedAt ? flags[f] !== false : false)
+
+  const config: ProjectConfig = {
+    ...previous,
+    mainDoc,
+    langs: previous?.langs ?? [],
+    workflow,
+    proposals: readConfig(root)?.proposals,
+    features: flags,
+    initializedAt: previous?.initializedAt ?? new Date().toISOString(),
+  }
   writeConfig(root, config)
-  p.outro(`Ready. Skill installed in ${pc.cyan('.claude/skills/markode')}. To review the docs in another language: ${pc.cyan('markode translate')}`)
+  const on = featureState(root)
+  const lines = FEATURES.filter((f) => on[f]).map((f) => `${pc.green('●')} ${FEATURE_INFO[f].label} ${pc.dim('— ' + FEATURE_INFO[f].hint)}`)
+  p.note([`${pc.green('●')} Viewer ${pc.dim('— see and edit every .md file of the project')}`, ...lines].join('\n'), 'Installed')
+  p.outro(`Ready. Turn modules on or off in ${pc.cyan('Settings → Features')}, or with ${pc.cyan('markode features')}.`)
   return config
 }
 
 /**
- * Choose how new projects are set up, once per user: with answers given now (applied to every
- * project without asking) or asking in each project. `quick` picks the latter without questions.
+ * Choose how new projects are set up, once per user: which modules they get (applied without asking), or
+ * ask in each project. `quick` picks the latter without questions; `custom` also asks for the answers
+ * markode would otherwise detect or default (main doc, language, rules, monorepo layout).
  */
-export async function runSetup(quick = false): Promise<SetupDefaults> {
+export async function runSetup(quick = false, custom = false): Promise<SetupDefaults> {
   const previous = readDefaults() ?? BASE_DEFAULTS
   if (quick) {
     const d = { ...previous, mode: 'ask' as const }
@@ -379,44 +428,39 @@ export async function runSetup(quick = false): Promise<SetupDefaults> {
     return d
   }
   p.intro(pc.bgCyan(pc.black(' markode setup ')))
-  const mode = check(
-    await p.select<SetupDefaults['mode']>({
+  const ask = check(
+    await p.select({
       message: 'How should markode set up your projects?',
       options: [
-        { value: 'defaults', label: 'With my answers', hint: 'asked now, once; every project uses them' },
-        { value: 'ask', label: 'Ask in each project' },
+        { value: 'defaults', label: 'Always the same way', hint: 'choose the modules now; every new project gets them without questions' },
+        { value: 'ask', label: 'Ask in each project', hint: 'one question per project: which modules' },
       ],
       initialValue: previous.mode === 'ask' && !readDefaults() ? 'defaults' : previous.mode,
     }),
   )
-  if (mode === 'ask') {
-    const d = { ...previous, mode }
+  if (ask === 'ask') {
+    const d = { ...previous, mode: 'ask' as const }
     writeDefaults(d)
-    p.outro(`Saved. Each project will ask its own questions. Change it with ${pc.cyan('markode setup')}`)
+    p.outro(`Saved. Each project will ask which modules to install. Change it with ${pc.cyan('markode setup')}`)
     return d
   }
-
-  const mainDoc = check(
-    await p.select({
-      message: 'Main document to create when a project has none',
-      options: MAIN_DOCS.map((d) => ({ value: d, label: d, hint: d === 'CLAUDE.md' ? 'Claude Code' : 'other agents' })),
-      initialValue: previous.mainDoc,
-    }),
-  )
-  const workflow = check(await p.select<Workflow>({ message: 'Base structure for specs and planning', options: WORKFLOW_OPTIONS, initialValue: previous.workflow }))
-  let agents = previous.agents
-  let monorepo = previous.monorepo
-  if (workflow === 'openspec')
-    agents = check(await p.multiselect({ message: 'Install the OpenSpec commands for which agents?', options: agentOptions(), initialValues: previous.agents, required: false }))
-  if (workflow === 'speckit') agents = [check(await p.select({ message: 'Install the Spec Kit commands for which agent?', options: agentOptions(), initialValue: previous.agents[0] }))]
-  if (workflow === 'markode') monorepo = check(await p.select<SetupDefaults['monorepo']>({ message: MONOREPO_QUESTION, options: MONOREPO_OPTIONS, initialValue: previous.monorepo }))
-  const sourceLang = check(await p.select<Lang>({ message: `${SOURCE_LANG_QUESTION}; projects that already declare one keep it`, options: LANG_OPTIONS, initialValue: previous.sourceLang }))
-  const rules = listRules()
-  const selected = await chooseRules('Working rules for your projects', rules, previous.rules.filter((id) => rules.some((r) => r.id === id)))
-  const rulesInSubprojects = selected.length ? check(await p.confirm({ message: 'In monorepos, apply the rules to the subprojects too?', initialValue: previous.rulesInSubprojects })) : false
-  const hideInVsCode = check(await p.confirm({ message: HIDE_QUESTION, initialValue: previous.hideInVsCode }))
-
-  const d: SetupDefaults = { mode, mainDoc, workflow, agents, monorepo, sourceLang, rules: selected, rulesInSubprojects, hideInVsCode }
+  const features = await askFeatures('What should every new project get? (the viewer is always included)', previous.features)
+  let d: SetupDefaults = { ...previous, mode: 'defaults', features }
+  if (custom) {
+    const mainDoc = check(
+      await p.select({
+        message: 'Main document to create when a project has none',
+        options: MAIN_DOCS.map((m) => ({ value: m, label: m, hint: m === 'CLAUDE.md' ? 'Claude Code' : 'other agents' })),
+        initialValue: previous.mainDoc,
+      }),
+    )
+    const sourceLang = check(await p.select<Lang>({ message: `${SOURCE_LANG_QUESTION}, when a project's docs don't show it`, options: LANG_OPTIONS, initialValue: previous.sourceLang }))
+    const rules = listRules()
+    const selected = features.includes('rules') ? await chooseRules('Working rules for your projects', rules, previous.rules.filter((id) => rules.some((r) => r.id === id))) : previous.rules
+    const rulesInSubprojects = selected.length ? check(await p.confirm({ message: 'In monorepos, apply the rules to the subprojects too?', initialValue: previous.rulesInSubprojects })) : false
+    const monorepo = features.includes('dashboard') ? check(await p.select<SetupDefaults['monorepo']>({ message: MONOREPO_QUESTION, options: MONOREPO_OPTIONS, initialValue: previous.monorepo })) : previous.monorepo
+    d = { ...d, mainDoc, sourceLang, rules: selected, rulesInSubprojects, monorepo }
+  }
   writeDefaults(d)
   p.outro(`Saved in ${pc.cyan(defaultsFile())}. Change them with ${pc.cyan('markode setup')}; for a single project: ${pc.cyan('markode init --custom')}`)
   return d

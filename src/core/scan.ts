@@ -9,8 +9,10 @@ export interface TreeNode {
   kind: 'dir' | 'file'
   /** Folder that holds its own CLAUDE.md / AGENTS.md (monorepo package). */
   project?: boolean
-  /** Listed in .markodeignore. */
+  /** Listed in .markodeignore, or archived. */
   ignored?: boolean
+  /** An applied proposal kept for the user (`proposals/…/applied/`): always ignored, by markode and agents. */
+  archived?: boolean
   children?: TreeNode[]
 }
 
@@ -59,12 +61,18 @@ export function watchSkips(root: string): (rel: string, isDir?: boolean) => bool
   }
 }
 
+/** Where applied proposals are kept: an `applied/` folder inside a `proposals/` folder. */
+export const isArchive = (rel: string) => {
+  const parts = rel.split('/')
+  return parts[parts.length - 1] === 'applied' && parts.slice(0, -1).includes('proposals')
+}
+
 /** Tree of every .md file under root; folders without .md files are pruned, except empty ones (just created). */
 export function scanTree(root: string): TreeNode[] {
   const gitIgnore = loadIgnore(root, '.gitignore')
   const mdIgnore = loadIgnore(root, IGNORE_FILE)
 
-  function walk(dirAbs: string, parentIgnored: boolean): TreeNode[] {
+  function walk(dirAbs: string, parentIgnored: boolean, parentArchived: boolean): TreeNode[] {
     let entries: fs.Dirent[]
     try {
       entries = fs.readdirSync(dirAbs, { withFileTypes: true })
@@ -78,21 +86,22 @@ export function scanTree(root: string): TreeNode[] {
       const rel = toPosix(path.relative(root, abs))
       if (e.isDirectory()) {
         if (gitIgnore.ignores(rel + '/')) continue
-        const ignored = parentIgnored || mdIgnore.ignores(rel + '/')
-        const children = walk(abs, ignored)
+        const archived = parentArchived || isArchive(rel)
+        const ignored = parentIgnored || archived || mdIgnore.ignores(rel + '/')
+        const children = walk(abs, ignored, archived)
         if (!children.length && !isEmptyDir(abs)) continue
         const project = MAIN_DOCS.some((d) => children.some((c) => c.kind === 'file' && c.name === d))
-        nodes.push({ name: e.name, path: rel, kind: 'dir', project: project || undefined, ignored: ignored || undefined, children })
+        nodes.push({ name: e.name, path: rel, kind: 'dir', project: project || undefined, ignored: ignored || undefined, archived: archived || undefined, children })
       } else if (e.isFile() && e.name.toLowerCase().endsWith('.md')) {
         if (gitIgnore.ignores(rel)) continue
         const ignored = parentIgnored || mdIgnore.ignores(rel)
-        nodes.push({ name: e.name, path: rel, kind: 'file', ignored: ignored || undefined })
+        nodes.push({ name: e.name, path: rel, kind: 'file', ignored: ignored || undefined, archived: parentArchived || undefined })
       }
     }
     return nodes.sort(compareNodes)
   }
 
-  return walk(root, false)
+  return walk(root, false, false)
 }
 
 function isEmptyDir(abs: string) {

@@ -4,6 +4,7 @@ import path from 'node:path'
 import { mainDocOf, readConfig, TEMPLATES_DIR, writeConfig } from './config.js'
 import { fill } from './scaffold.js'
 import { writeManagedBlock } from './sdd.js'
+import { PROJECT_TARGETS, projectTargets } from './skills.js'
 
 /**
  * Proposals and comments: the AI writes choices as a doc (diagrams, options to tick) and the user
@@ -12,16 +13,18 @@ import { writeManagedBlock } from './sdd.js'
  */
 export type ProposalLayout = 'general' | 'structured'
 
-const SKILL = path.join('.claude', 'skills', 'markode-proposals')
+const SKILL = 'markode-proposals'
+/** Where the skill can be: Claude Code's folder and the one other agents read. */
+const skillDirs = (root: string) => Object.values(PROJECT_TARGETS).map((t) => path.join(root, t, SKILL))
 
 export function proposalsState(root: string): { active: boolean; layout: ProposalLayout } {
-  return { active: fs.existsSync(path.join(root, SKILL, 'SKILL.md')), layout: readConfig(root)?.proposals ?? 'general' }
+  return { active: skillDirs(root).some((d) => fs.existsSync(path.join(d, 'SKILL.md'))), layout: readConfig(root)?.proposals ?? 'general' }
 }
 
 const WHERE: Record<ProposalLayout, string> = {
-  general: '`docs/proposals/NNN-short-name.md` (NNN: the next number in that folder)',
+  general: '`docs/proposals/NNN-short-name.md` (NNN: the next number in that folder, counting `applied/`)',
   structured:
-    '`docs/proposals/<topic>/NNN-short-name.md`, one folder per topic (e.g. `sidebar`, `auth`); in a monorepo, a proposal for a single project goes in `<project>/docs/proposals/<topic>/` (e.g. `apps/web/docs/proposals/auth/`). Reuse an existing topic folder; ask the user before creating a new one',
+    '`docs/proposals/<topic>/NNN-short-name.md`, one folder per topic (e.g. `sidebar`, `auth`; NNN: the next number in it, counting its `applied/`); in a monorepo, a proposal for a single project goes in `<project>/docs/proposals/<topic>/` (e.g. `apps/web/docs/proposals/auth/`). Reuse an existing topic folder; ask the user before creating a new one',
 }
 
 function section(layout: ProposalLayout) {
@@ -34,7 +37,9 @@ function section(layout: ProposalLayout) {
     `- Where: ${WHERE[layout]}.`,
     '- After writing one, run `markode wait <path>` in the background: it returns when the user answers in markode.',
     '- The user ticks options and comments (`<!-- comment by … -->`). When it is answered, reply to the comments,',
-    '  update every doc that depends on the decision (tasks, phases, architecture…), then delete the proposal.',
+    '  update every doc that depends on the decision (tasks, phases, architecture…), then archive the proposal:',
+    '  `status: applied`, moved to the `applied/` folder next to it. Never read or search archived proposals',
+    '  unless the user asks about a past one.',
   ].join('\n')
 }
 
@@ -45,9 +50,12 @@ function mainDocs(root: string, mainDoc: string | null): string[] {
 }
 
 export function activateProposals(root: string, layout: ProposalLayout, mainDoc: string | null) {
-  const dir = path.join(root, SKILL)
-  fs.mkdirSync(dir, { recursive: true })
-  fs.writeFileSync(path.join(dir, 'SKILL.md'), fill(fs.readFileSync(path.join(TEMPLATES_DIR, 'proposals', 'SKILL.md'), 'utf8'), { where: WHERE[layout] }))
+  const text = fill(fs.readFileSync(path.join(TEMPLATES_DIR, 'proposals', 'SKILL.md'), 'utf8'), { where: WHERE[layout] })
+  for (const target of projectTargets(root)) {
+    const file = path.join(root, PROJECT_TARGETS[target], SKILL, 'SKILL.md')
+    fs.mkdirSync(path.dirname(file), { recursive: true })
+    if (!fs.existsSync(file) || fs.readFileSync(file, 'utf8') !== text) fs.writeFileSync(file, text)
+  }
   fs.mkdirSync(path.join(root, 'docs', 'proposals'), { recursive: true })
   for (const file of mainDocs(root, mainDoc)) writeManagedBlock(file, section(layout), false, 'proposals')
   writeConfig(root, { ...(readConfig(root) ?? { mainDoc, langs: [] }), proposals: layout })
@@ -55,7 +63,7 @@ export function activateProposals(root: string, layout: ProposalLayout, mainDoc:
 
 /** Remove the skill and the main doc section; existing proposals and comments stay as they are. */
 export function deactivateProposals(root: string, mainDoc: string | null) {
-  fs.rmSync(path.join(root, SKILL), { recursive: true, force: true })
+  for (const dir of skillDirs(root)) fs.rmSync(dir, { recursive: true, force: true })
   for (const file of mainDocs(root, mainDoc)) writeManagedBlock(file, null, false, 'proposals')
 }
 

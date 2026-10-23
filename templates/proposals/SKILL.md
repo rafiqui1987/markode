@@ -1,6 +1,6 @@
 ---
 name: markode-proposals
-description: Write temporary proposals the user answers in markode (options with ASCII or Mermaid diagrams, choices to tick, comments like in Word), then apply their answer to every affected doc and delete the proposal. Use when an answer would be long or has options or a design to validate, when the user asks for a proposal, or when they say a proposal is answered.
+description: Write temporary proposals the user answers in markode (options with ASCII or Mermaid diagrams, choices to tick, comments like in Word), then apply their answer to every affected doc and archive the proposal. Use when an answer would be long or has options or a design to validate, when the user asks for a proposal, or when they say a proposal is answered.
 ---
 
 # Proposals (markode)
@@ -25,7 +25,12 @@ After writing the file:
    working on anything that doesn't depend on the decision.
 
 When the watcher's output arrives, go straight to "When the user answers". Once applied, the decision
-lives in the docs it affects and the proposal is deleted.
+lives in the docs it affects and the proposal is archived.
+
+**Archived proposals**: an applied proposal moves to an `applied/` folder next to it (e.g.
+`docs/proposals/applied/`). It is kept only for the user to look back at: never read, search or cite
+anything in an `applied/` folder of proposals, and don't treat it as current, unless the user asks
+about a past proposal. markode hides it too.
 
 ## Where
 
@@ -36,7 +41,7 @@ lives in the docs it affects and the proposal is deleted.
 ````md
 ---
 type: proposal
-status: open          # open → answered (set by the user in markode); deleted once applied
+status: open          # open → answered (set by the user in markode) → applied (archived)
 updated: YYYY-MM-DD
 affects: [docs/tasks/T-004-login.md, docs/architecture/auth.md]   # docs the decision will change
 ---
@@ -110,7 +115,8 @@ Answer each comment with a reply right below it (or below the last reply), same 
 ```
 
 Never delete or rewrite the user's comments: they resolve them in markode. Never put `-->` inside a
-comment's text.
+comment's text. Comments in other docs reach you while you work (`markode changes`, see the markode
+skill).
 
 - `affects`: the docs that depend on this decision (tasks, phases, architecture, vision, other
   proposals…), so the user sees what their choice will change.
@@ -126,6 +132,8 @@ comment's text.
    vision…). Record it in its one place: in the markode method, the architecture file for design
    decisions, and a line in the log of the task it belongs to (`<date>: decided <what> (proposal
    <name>)`).
-4. Delete the proposal file: it was temporary, the decision now lives in those docs. A task that was
-   `blocked` on it goes back to `in-progress`, with its next step from your "After your answer" list.
+4. Archive the proposal: set `status: applied` and `updated`, and move the file to the `applied/` folder
+   next to it (create it if needed; keep the file name). The decision now lives in those docs. A task
+   that was `blocked` on it goes back to `in-progress`, with its next step from your "After your
+   answer" list.
 5. Tell the user in a few lines what you changed and where, then continue with that task.

@@ -84,6 +84,12 @@ export interface ProjectConfig {
   proposals?: 'general' | 'structured'
   /** The user doesn't want a CLAUDE.md / AGENTS.md pointing to the other one: don't offer it again. */
   skipLink?: boolean
+  /** Parts of the interface this user turned off (see core/features.ts); missing means on. */
+  features?: { rules?: boolean; translations?: boolean; dashboard?: boolean; skills?: boolean }
+  /** Rules removed when the rules module was turned off, restored when it is turned back on. */
+  savedRules?: string[]
+  /** Source language declared before the AI agent was turned off (it lives in the agent's section). */
+  savedSourceLang?: Lang
   initializedAt?: string
 }
 
@@ -108,7 +114,7 @@ export function readConfig(root: string): ProjectConfig | null {
     const raw = JSON.parse(fs.readFileSync(configFile(root), 'utf8'))
     // v0.1 stored a single `lang`.
     const langs = Array.isArray(raw.langs) ? raw.langs : raw.lang ? [raw.lang] : []
-    return { mainDoc: raw.mainDoc ?? null, langs: langs.filter(isLangCode), langNames: raw.langNames, workflow: raw.workflow, proposals: raw.proposals, skipLink: raw.skipLink === true || undefined, initializedAt: raw.initializedAt }
+    return { mainDoc: raw.mainDoc ?? null, langs: langs.filter(isLangCode), langNames: raw.langNames, workflow: raw.workflow, proposals: raw.proposals, skipLink: raw.skipLink === true || undefined, features: raw.features, savedRules: raw.savedRules, savedSourceLang: isLang(raw.savedSourceLang) ? raw.savedSourceLang : undefined, initializedAt: raw.initializedAt }
   } catch {
     return null
   }

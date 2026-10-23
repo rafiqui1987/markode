@@ -1,27 +1,34 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import { formatChanges, startSession, takeChanges } from '../core/changes.js'
 import { checkDocs } from '../core/check.js'
 import { PKG_ROOT, readConfig, writeConfig } from '../core/config.js'
-import { readDefaults, type SetupDefaults } from '../core/defaults.js'
+import { BASE_DEFAULTS, readDefaults, writeDefaults } from '../core/defaults.js'
+import { FEATURE_INFO, FEATURES, featureState, isFeature, isProfile, PROFILE_FEATURES, refreshInstalled, REQUIRES, setFeature } from '../core/features.js'
 import { keepLanguage, markSynced, syncReport } from '../core/i18n.js'
 import { linkMainDocs, missingMainDocs } from '../core/scaffold.js'
 import { answerSummary, waitForAnswer } from '../core/wait.js'
 import { startServer } from '../server/index.js'
-import { runInit, runSetup } from './init.js'
+import { askFeatures, type InitPlan, runInit, runSetup } from './init.js'
 import { runTranslate } from './translate.js'
 
 const HELP = `markode — visual editor for your project's Markdown
 
 Usage
-  markode                 init if needed, then open the editor
-  markode init            (re)run the project setup: main doc, specs structure, rules, languages
-  markode setup           choose how projects are set up: with your saved answers, or asking each time
+  markode                 set the project up if needed, then open the editor
+  markode init            (re)run the project setup: choose the modules to install (or use your defaults)
+  markode setup           choose how projects are set up: always the same modules, or asking each time
+  markode features        list the modules and whether they are on in this project
+  markode features <module> on|off   turn a module on or off (same as Settings → Features)
   markode serve           open the editor without running init
   markode translate       choose languages to review the docs in (or: markode --translate)
   markode check [--json]  what /markode sync fixes: answered proposals, phases vs tasks, projects table, broken links
   markode wait <proposal> wait until the user answers a proposal in markode, then print the answer
   markode link [--dry-run] where there is only CLAUDE.md or only AGENTS.md, add the other one pointing to it
   markode link --skip     don't offer it again in this project
+  markode changes [--json] what the user edited or commented in markode since the agent was last told
+  markode changes --start  a new agent session: what happened before is old news
+  markode changes --hook <event>  the same, as Claude Code hook output (silent when nothing changed)
 
 For the agent's /markode translate:
   markode translate --status [--json]                    translations + files not in the source language
@@ -30,8 +37,11 @@ For the agent's /markode translate:
 
 Options
   -v, --version  print the version
-  -D           first run: skip saving defaults; every project asks its own questions
-  --custom     init: ask every question for this project, ignoring your defaults
+  -D           first run: don't save your choice as the default for new projects
+  --profile <viewer|agent|full>  init: install this set of modules, without questions
+  --yes        init: no questions; your defaults, or the recommended modules (viewer + AI agent)
+  --custom     init: choose each module and answer every question for this project
+               setup: also choose the main doc, language, rules and monorepo layout
   --port <n>   server port (default 4319)
   --no-open    do not open the browser
 `
@@ -56,20 +66,25 @@ async function main() {
   if (command === 'check') return check()
   if (command === 'wait') return wait()
   if (command === 'link') return link()
+  if (command === 'changes') return changes()
+  if (command === 'features') return features()
   if (command === 'setup') {
-    await runSetup(flag('-D'))
+    await runSetup(false, flag('--custom'))
     return
   }
   if (command === 'init') {
-    await runInit(root, flag('--custom') ? null : await defaults())
+    const p = await plan()
+    if (p) await runInit(root, p)
+    else console.log('No terminal to ask in: run `markode init --yes` or `--profile <viewer|agent|full>`.')
     return
   }
   // Other settings (e.g. `link --skip`) can be saved before the setup ran: only `init` sets initializedAt.
   if (command === 'start' && !readConfig(root)?.initializedAt) {
-    if (process.stdin.isTTY) await runInit(root, flag('--custom') ? null : await defaults())
-    // Saved defaults need no answers, so they also apply without a terminal.
-    else if (readDefaults()?.mode === 'defaults') await runInit(root, readDefaults())
+    const p = await plan()
+    if (p) await runInit(root, p)
   }
+  // Skills and sections markode installed follow the installed version, without another init.
+  if (command === 'start' || command === 'serve') refreshInstalled(root)
   const unlinked = command === 'start' && process.stdout.isTTY && !readConfig(root)?.skipLink ? missingMainDocs(root) : []
   if (unlinked.length)
     console.log(`Tip: Claude Code reads CLAUDE.md and other agents read AGENTS.md; ${unlinked.map((m) => m.path).join(', ')} missing. Run \`markode link\` (or \`markode link --skip\`).`)
@@ -81,10 +96,47 @@ async function main() {
   process.exitCode = 1
 }
 
-/** The user's defaults when projects use them, null to ask; the first time, choose (or -D to always ask). */
-async function defaults(): Promise<SetupDefaults | null> {
-  const d = readDefaults() ?? (process.stdin.isTTY ? await runSetup(flag('-D')) : null)
-  return d?.mode === 'defaults' ? d : null
+/**
+ * What `init` installs, with as few questions as possible: `--profile`, `--yes` or the saved defaults need
+ * none; otherwise one question (which modules), saved the first time as the default for new projects.
+ * Null when it would have to ask and there is no terminal.
+ */
+async function plan(): Promise<InitPlan | null> {
+  const saved = readDefaults()
+  const d = saved ?? BASE_DEFAULTS
+  const profile = option('--profile')
+  if (flag('--custom')) return { features: await askFeatures(), defaults: null }
+  if (profile) {
+    if (!isProfile(profile)) throw new Error(`Unknown profile "${profile}": use viewer, agent or full`)
+    return { features: PROFILE_FEATURES[profile], defaults: d }
+  }
+  if (saved?.mode === 'defaults' || flag('--yes')) return { features: d.features, defaults: d }
+  if (!process.stdin.isTTY) return null
+  const features = await askFeatures()
+  if (!saved && !flag('-D')) {
+    writeDefaults({ ...d, mode: 'defaults', features })
+    console.log(`  Saved as your default for new projects (they won't ask again). Change it with \`markode setup\`.`)
+  }
+  return { features, defaults: d }
+}
+
+/** List the modules, or turn one on or off: the same as Settings → Features. */
+function features() {
+  const [id, value] = [args[1], args[2]]
+  if (id) {
+    if (!isFeature(id) || (value !== 'on' && value !== 'off')) {
+      console.error(`Usage: markode features <${FEATURES.join('|')}> on|off`)
+      process.exitCode = 1
+      return
+    }
+    const changed = setFeature(root, id, value === 'on', readDefaults() ?? BASE_DEFAULTS)
+    for (const [f, on] of Object.entries(changed)) console.log(`${on ? 'on ' : 'off'}  ${FEATURE_INFO[f as keyof typeof FEATURE_INFO].label}`)
+    if (!Object.keys(changed).length) console.log(`${FEATURE_INFO[id].label} was already ${value}.`)
+    return
+  }
+  const state = featureState(root)
+  console.log('on   Viewer — see and edit every .md file of the project (always on)')
+  for (const f of FEATURES) console.log(`${state[f] ? 'on ' : 'off'}  ${FEATURE_INFO[f].label} — ${FEATURE_INFO[f].hint}${REQUIRES[f] ? ` (needs ${FEATURE_INFO[REQUIRES[f]!].label})` : ''}`)
 }
 
 function check() {
@@ -113,6 +165,19 @@ function link() {
   if (!missing.length) return console.log('Every main doc has its CLAUDE.md and AGENTS.md (or neither).')
   if (flag('--dry-run')) return console.log(missing.map((m) => `would create ${m.path} → ${m.pointsTo}`).join('\n'))
   for (const p of linkMainDocs(root)) console.log(`created ${p}`)
+}
+
+function changes() {
+  if (flag('--start')) return startSession(root)
+  const list = takeChanges(root)
+  const event = option('--hook')
+  if (event) {
+    const text = formatChanges(list)
+    if (text) console.log(JSON.stringify({ hookSpecificOutput: { hookEventName: event, additionalContext: text } }))
+    return
+  }
+  if (flag('--json')) return console.log(JSON.stringify(list, null, 2))
+  console.log(formatChanges(list) || 'No edits or comments from the user since you were last told.')
 }
 
 async function wait() {

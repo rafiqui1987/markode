@@ -1,6 +1,6 @@
 ---
 name: markode
-description: Conventions for every .md file in this project (CLAUDE.md, AGENTS.md, docs/) and the translation sync. Use when creating or editing any .md file, when finishing a task or phase, at the start of a session, or when the user runs /markode sync.
+description: Conventions for every .md file in this project (CLAUDE.md, AGENTS.md, docs/), keeping the docs consistent (/markode sync) and translating them (/markode translate). Use when creating or editing any .md file, at the start and end of a session, or when the user runs /markode sync or /markode translate.
 ---
 
 # markode
@@ -12,21 +12,50 @@ The user reads and edits this project's Markdown in **markode**, a visual editor
 - Every `.md` file is written in the project's **source language**, declared in the main doc's "Working rules" section (`<!-- markode:source-lang:xx -->`, default English). Frontmatter keys are always English.
 - Translations live in `.markode/i18n/<lang>/<same path>` (hidden, git-ignored). Never treat them as sources.
 
+## CLAUDE.md and AGENTS.md
+
+Claude Code reads `CLAUDE.md`; Codex, Cursor, Gemini and most other agents read `AGENTS.md`. At the
+start of a session, run `markode link --dry-run`. If it lists files to create (for example, the project
+was set up with another agent and has only `AGENTS.md`), ask the user once, in one line, whether to
+create them. Each one only points to the existing doc; nothing is copied.
+
+- Yes: `markode link`.
+- No: `markode link --skip`, so it isn't offered again.
+
+## While you work: the user's edits and comments
+
+The user keeps editing docs and commenting in markode while you work. `markode changes` lists what they
+did since you were last told (and marks it as told): docs they edited, with the section, and new
+comments. In Claude Code, hooks run it for you after every step when the project set them up (you then
+see a "markode: the user changed docs…" note); otherwise run `markode changes --start` at the start of
+the session and `markode changes` between steps.
+
+- **An edited doc**: note it. Re-read it before you work on that part of the project; until then, do
+  nothing about it.
+- **A comment on what you are working on** (the doc, section or task at hand): take it into this
+  session. Reply right below it, with the same indentation, and apply what it asks:
+  `<!-- reply by AI, YYYY-MM-DD: what you did or why not -->`
+- **A comment on anything else**: ask the user in one line whether to take it now or leave it. Then reply
+  below it with what was decided.
+- Never delete or rewrite the user's comments (they resolve them in markode), and never put `-->` inside
+  a comment's text. Comments in a proposal come with its answer instead (see the proposals skill).
+
 ## Frontmatter
 
-Put this at the top of docs that track work:
+Docs that track work start with a frontmatter block; the markode dashboard reads it:
 
 ```yaml
 ---
-type: phase        # phase | tasks | rules | architecture | decision | note
-status: pending    # pending | in-progress | done | blocked
-phase: 2           # only for type: phase (ordering)
+type: task         # vision | architecture | phase | tasks | task | note
+status: pending    # pending | in-progress | blocked | done
+phase: 2           # phases: their order; tasks: the phase they belong to
 updated: YYYY-MM-DD
 ---
 ```
 
 - Update `status` and `updated` whenever you change the doc.
-- Phases: one file per phase in `docs/phases/NN-name.md`, created when the phase starts being planned.
+- If the main doc has a "Workflow (markode method)" section, follow it: it says where vision,
+  architecture, phases and tasks live, and how to start and close a session.
 
 ## Content conventions
 
@@ -37,24 +66,44 @@ updated: YYYY-MM-DD
 | Folder / module structure | a ` ```tree ` block: indented lines; two spaces + `#` starts a description |
 | Flows, sequences, states | a ` ```mermaid ` block |
 
-When you finish a task: tick its checkbox, update the doc's `status`/`updated`, and set the phase to `done` when all its tasks are done.
-
 Never edit the section between `<!-- markode:rules:start -->` and `<!-- markode:rules:end -->` by hand; it is generated from the user's rule presets.
 
-## Translation sync (`/markode sync`)
+## Docs sync (`/markode sync`)
 
-Run this when the user asks for `/markode sync`, at the start of a session, and after you edit any `.md` file.
+Keeps the docs consistent; it never touches translations. Run it when the user asks for `/markode sync`,
+at the start of a session (answered proposals first), after editing `.md` files and when closing a session.
 
-1. `markode sync --status --json` (use `pnpm exec markode` if it is a local dependency). It returns:
-   `{ sourceLang, langs, foreign: [{ path, detected }], files: [{ path, lang, status, translation }] }`.
-2. **Files not in the source language** (`foreign`): ask the user, in one question listing them, whether to convert each one to `sourceLang`.
-   - Yes: rewrite the file in place in the source language, keeping structure, code, links and markers byte-identical.
-   - No: `markode sync --keep <path> [<path>...]` so they are not offered again.
-3. **Translations** (`files`, one entry per enabled language), by status:
-   - `missing` or `outdated`: translate the source `path` into `lang`, write it to `translation`.
-   - `pending-sync`: the user edited the translation. Apply their changes to the source `path` (translated into the source language, untouched parts byte-identical), then regenerate `translation` — and the other languages' translations of that file.
-   - `conflict`: both changed. Merge into the source file (source wins on contradictions), regenerate the translations, and tell the user what conflicted.
-   - `synced`: nothing to do.
-4. `markode sync --mark --lang <lang> <path> [<path>...]` for every translation you wrote (without `--lang` it marks every enabled language).
+1. `markode check --json` (use `pnpm exec markode` if it is a local dependency). It returns:
+   `{ proposals, phases: [{ phase, task, ticked, status }], projects: { missing, gone } | null, links: [{ file, line, target }] }`.
+2. `proposals`: answered proposals. Apply each one as the `markode-proposals` skill says ("When the user answers").
+3. `phases`: tick a task in its phase when it is `done`, untick it when it isn't; then set the phase's
+   `status` (`in-progress` once a task started, `done` when every task and "Definition of done" item is ticked).
+4. `projects`: projects missing from the main doc's "Projects" table, or rows whose folder is gone. Ask the
+   user before adding or removing rows.
+5. `links`: fix links to docs that were moved (find the new path); ask about docs that were deleted.
+6. Tell the user in one or two lines what you changed. If nothing came up, say the docs are consistent.
+
+## Translations (`/markode translate`)
+
+Only when the user asks for `/markode translate` (markode shows a button to copy it when translations
+fall behind). Never translate as a side effect of other work, and never change a source file without
+the user's approval.
+
+1. `markode translate --status --json`. It returns
+   `{ sourceLang, langs, names, foreign: [{ path, detected }], files: [{ path, lang, status, translation }] }`.
+   `names` maps each language code to its name (`ja` → `Japanese`): translate into that language, also for
+   codes the user added by hand.
+2. `missing` or `outdated`: translate the source `path` into `lang` and write it to `translation`.
+3. **Changes that would touch a source file: ask first.** In one message, list each file with a one-line
+   summary of what would change, and apply only what the user approves:
+   - `pending-sync`: the user edited the translation; their changes would go into the source `path`
+     (translated into the source language, untouched parts byte-identical).
+   - `conflict`: both changed; propose a merge (source wins on contradictions) and show what conflicts.
+   - `foreign`: files not written in the source language; offer to convert them. For the ones the user
+     wants to keep: `markode translate --keep <path> [<path>...]`.
+   After applying, regenerate that file's translations in every language. What the user doesn't approve
+   stays as it is (still `pending-sync` or `conflict`).
+4. `markode translate --mark --lang <lang> <path> [<path>...]` for every translation you wrote (without
+   `--lang` it marks every enabled language).
 
 Translation rules: keep frontmatter keys, code blocks, `tree` and `mermaid` identifiers, link targets, table structure and the `<!-- ... -->` markers unchanged; translate only human text (including frontmatter values like titles, but not `status`/`type` values).

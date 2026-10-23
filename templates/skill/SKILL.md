@@ -22,6 +22,24 @@ create them. Each one only points to the existing doc; nothing is copied.
 - Yes: `markode link`.
 - No: `markode link --skip`, so it isn't offered again.
 
+## While you work: the user's edits and comments
+
+The user keeps editing docs and commenting in markode while you work. `markode changes` lists what they
+did since you were last told (and marks it as told): docs they edited, with the section, and new
+comments. In Claude Code, hooks run it for you after every step when the project set them up (you then
+see a "markode: the user changed docs…" note); otherwise run `markode changes --start` at the start of
+the session and `markode changes` between steps.
+
+- **An edited doc**: note it. Re-read it before you work on that part of the project; until then, do
+  nothing about it.
+- **A comment on what you are working on** (the doc, section or task at hand): take it into this
+  session. Reply right below it, with the same indentation, and apply what it asks:
+  `<!-- reply by AI, YYYY-MM-DD: what you did or why not -->`
+- **A comment on anything else**: ask the user in one line whether to take it now or leave it. Then reply
+  below it with what was decided.
+- Never delete or rewrite the user's comments (they resolve them in markode), and never put `-->` inside
+  a comment's text. Comments in a proposal come with its answer instead (see the proposals skill).
+
 ## Frontmatter
 
 Docs that track work start with a frontmatter block; the markode dashboard reads it:

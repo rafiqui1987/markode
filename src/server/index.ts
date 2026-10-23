@@ -15,6 +15,9 @@ import { activateProposals, authorName, deactivateProposals, proposalsState } fr
 import { sddPrefixes, summarizeSdd } from '../core/sdd.js'
 import { linkMainDocs, missingMainDocs } from '../core/scaffold.js'
 import { waitingOn } from '../core/wait.js'
+import { logSave } from '../core/changes.js'
+import { BASE_DEFAULTS, readDefaults } from '../core/defaults.js'
+import { FEATURES, featureState, isFeature, setFeature } from '../core/features.js'
 import { getSkill, installSkill, listSkills, PROJECT_TARGETS, type ProjectTarget, projectTargets, setSkillTags, skillSources } from '../core/skills.js'
 
 interface Options {
@@ -81,9 +84,11 @@ function isLocalRequest(req: http.IncomingMessage): boolean {
 
 export async function startServer({ root, port, open: openBrowser }: Options) {
   const config = () => readConfig(root) ?? { mainDoc: null, langs: [] as string[] }
+  /** Translation languages in use: none while the translations module is off (they are kept for when it's back). */
+  const langs = () => (featureState(root).translations ? config().langs : [])
   const sourceLang = () => projectSourceLang(root, readConfig(root)?.mainDoc)
   /** The translation language a request asks for, or null when it wants the source files. */
-  const viewLang = (value: unknown): string | null => (isLangCode(value) && value !== sourceLang() && config().langs.includes(value) ? value : null)
+  const viewLang = (value: unknown): string | null => (isLangCode(value) && value !== sourceLang() && langs().includes(value) ? value : null)
 
   const mdPath = (rel: unknown) => {
     if (typeof rel !== 'string' || !rel.toLowerCase().endsWith('.md')) throw new HttpError(400, 'Expected a .md path')
@@ -107,13 +112,20 @@ export async function startServer({ root, port, open: openBrowser }: Options) {
         name: path.basename(root),
         mainDoc: c.mainDoc ?? null,
         sourceLang: sourceLang(),
-        langs: c.langs.filter((l) => l !== sourceLang()),
+        langs: langs().filter((l) => l !== sourceLang()),
         langNames: Object.fromEntries(c.langs.map((l) => [l, langName(l, c)])),
         git: isGitRepo(root),
         proposals: proposalsState(root),
         author: authorName(root),
         unlinked: c.skipLink ? [] : missingMainDocs(root),
+        features: featureState(root),
       }
+    },
+    /** Turn a module on or off (with the ones it needs or that need it); returns every module's state. */
+    'PUT /api/features': (_, body) => {
+      if (!isFeature(body.feature)) throw new HttpError(400, `Expected one of ${FEATURES.join(', ')}`)
+      setFeature(root, body.feature, !!body.on, readDefaults() ?? BASE_DEFAULTS)
+      return featureState(root)
     },
     'PUT /api/config': (_, body) => {
       const c = config()
@@ -149,7 +161,8 @@ export async function startServer({ root, port, open: openBrowser }: Options) {
     'GET /api/tree': (url) => {
       const l = viewLang(url.searchParams.get('lang'))
       const sync = l ? Object.fromEntries(allStatuses(root, l).map((e) => [e.path, e.status])) : {}
-      const foreign = Object.fromEntries(foreignFiles(root, sourceLang()).map((f) => [f.path, f.detected]))
+      // Files in another language are work for the agent's translations: without them, nothing to flag.
+      const foreign = featureState(root).translations ? Object.fromEntries(foreignFiles(root, sourceLang()).map((f) => [f.path, f.detected])) : {}
       return { tree: scanTree(root), git: gitStatuses(root), sync, foreign }
     },
     'POST /api/keep-language': (_, body) => ({ lang: keepLanguage(root, mdPath(body.path)) }),
@@ -169,7 +182,10 @@ export async function startServer({ root, port, open: openBrowser }: Options) {
       const l = viewLang(body.lang)
       const file = body.target === 'translation' && l ? translationPath(root, l, rel) : safeResolve(root, rel)
       fs.mkdirSync(path.dirname(file), { recursive: true })
-      fs.writeFileSync(file, String(body.content ?? ''))
+      const content = String(body.content ?? '')
+      // Edits and comments to the source docs are news for an agent at work (`markode changes`).
+      if (!l && featureState(root).agent) logSave(root, rel, fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '', content)
+      fs.writeFileSync(file, content)
       return { ok: true, status: l ? fileStatus(root, l, rel) : null }
     },
     'POST /api/file': (_, body) => {

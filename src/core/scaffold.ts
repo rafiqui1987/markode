@@ -32,35 +32,37 @@ export function createMainDoc(root: string, name: string) {
   fs.writeFileSync(file, fill(text, { name: path.basename(root), date: today() }))
 }
 
-/** Install (or refresh) the AI skill in .claude/skills/markode. */
-export function installSkill(root: string) {
-  const dir = path.join(root, '.claude', 'skills', 'markode')
-  fs.mkdirSync(dir, { recursive: true })
-  fs.copyFileSync(path.join(TEMPLATES_DIR, 'skill', 'SKILL.md'), path.join(dir, 'SKILL.md'))
-}
+const vsCodeFile = (root: string) => path.join(root, '.vscode', 'settings.json')
+const HIDDEN = '**/.markode'
 
-export function ensureGitignore(root: string) {
-  const file = path.join(root, '.gitignore')
-  const text = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : ''
-  if (text.split('\n').some((l) => ['.markode', '.markode/', '/.markode', '/.markode/'].includes(l.trim()))) return
-  fs.writeFileSync(file, text + (text && !text.endsWith('\n') ? '\n' : '') + '.markode/\n')
-}
-
-/** Hide .markode/ in VS Code so the project only shows the English files. */
-export function hideInVsCode(root: string) {
-  const file = path.join(root, '.vscode', 'settings.json')
-  let settings: Record<string, any> = {}
-  if (fs.existsSync(file)) {
-    try {
-      settings = JSON.parse(fs.readFileSync(file, 'utf8'))
-    } catch {
-      return false // JSONC with comments: leave it alone rather than destroy it
-    }
+/** VS Code's settings, {} when there are none, null when they have comments (JSONC we must not rewrite). */
+function readVsCode(root: string): Record<string, any> | null {
+  if (!fs.existsSync(vsCodeFile(root))) return {}
+  try {
+    return JSON.parse(fs.readFileSync(vsCodeFile(root), 'utf8'))
+  } catch {
+    return null
   }
-  settings['files.exclude'] = { ...(settings['files.exclude'] ?? {}), '**/.markode': true }
-  fs.mkdirSync(path.dirname(file), { recursive: true })
-  fs.writeFileSync(file, JSON.stringify(settings, null, 2) + '\n')
+}
+
+export const isHiddenInVsCode = (root: string) => readVsCode(root)?.['files.exclude']?.[HIDDEN] === true
+
+/** Hide .markode/ in VS Code so the project only shows its own files. False when the settings can't be rewritten. */
+export function hideInVsCode(root: string) {
+  const settings = readVsCode(root)
+  if (!settings) return false
+  settings['files.exclude'] = { ...(settings['files.exclude'] ?? {}), [HIDDEN]: true }
+  fs.mkdirSync(path.dirname(vsCodeFile(root)), { recursive: true })
+  fs.writeFileSync(vsCodeFile(root), JSON.stringify(settings, null, 2) + '\n')
   return true
+}
+
+export function showInVsCode(root: string) {
+  const settings = readVsCode(root)
+  if (!settings?.['files.exclude']?.[HIDDEN]) return
+  delete settings['files.exclude'][HIDDEN]
+  if (!Object.keys(settings['files.exclude']).length) delete settings['files.exclude']
+  fs.writeFileSync(vsCodeFile(root), JSON.stringify(settings, null, 2) + '\n')
 }
 
 /** Main docs the project lacks: in the root or a subproject that has only CLAUDE.md or only AGENTS.md. */
