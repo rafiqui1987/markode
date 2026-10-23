@@ -1,4 +1,5 @@
-import { Bot, Check, Copy, Eye, EyeOff, Languages, LayoutDashboard, MessageSquare, Radio, RotateCcw, ScrollText, SlidersHorizontal, Sparkles, ToggleRight, Type, X } from 'lucide-react'
+import { Bot, Check, Copy, EyeOff, Languages, LayoutDashboard, MessageSquare, Radio, RotateCcw, ScrollText, SlidersHorizontal, Sparkles, ToggleRight, Type, X } from 'lucide-react'
+import { MarkodeIcon } from './MarkodeIcon'
 import { useEffect, useState } from 'react'
 import { type EditorSettings, type Feature, FEATURES, type Info, type Lang, LANG_NAMES, LANGS, type ProposalLayout, REQUIRES } from '../api'
 import { type T, type TKey, UI_LANGS } from '../i18n'
@@ -354,7 +355,7 @@ export function Settings({ t, section: initialSection, theme, onTheme, info, set
               <div className="set-title">{t('settings.features')}</div>
               <p className="set-hint">{t('settings.featuresHint')}</p>
               <div className="feature on fixed">
-                <Eye size={16} className="feature-icon" />
+                <MarkodeIcon size={16} className="feature-icon" />
                 <div className="feature-body">
                   <div className="feature-name">{t('feature.viewer')}</div>
                   <p className="set-hint">{t('feature.viewer.hint')}</p>

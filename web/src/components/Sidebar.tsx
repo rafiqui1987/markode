@@ -1,4 +1,5 @@
-import { ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, Copy, Eye, EyeOff, FilePlus, FileText, Folder, FolderOpen, FolderPlus, Package, Search, Trash2, X } from 'lucide-react'
+import { ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, Copy, Eye, EyeOff, FilePlus, Folder, FolderOpen, FolderPlus, Package, Search, Trash2, X } from 'lucide-react'
+import { MarkodeIcon } from './MarkodeIcon'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { type GitStatus, type Lang, LANG_NAMES, type SyncStatus, type TreeNode } from '../api'
 import type { T } from '../i18n'
@@ -57,7 +58,7 @@ function DraftRow({ kind, depth, onDone }: { kind: TreeNode['kind']; depth: numb
     <li>
       <div className="node draft" style={{ paddingLeft: 6 + depth * 12 }}>
         <span className="chev" />
-        <span className="ico">{kind === 'dir' ? <Folder size={15} /> : <FileText size={15} />}</span>
+        <span className="ico">{kind === 'dir' ? <Folder size={15} /> : <MarkodeIcon size={15} />}</span>
         <input
           autoFocus
           spellCheck={false}
@@ -173,7 +174,7 @@ export function Sidebar(props: Props) {
             >
               <span className="chev">{n.kind === 'dir' ? open ? <ChevronDown size={14} /> : <ChevronRight size={14} /> : null}</span>
               <span className={`ico${n.project ? ' project' : ''}`}>
-                {n.kind === 'dir' ? n.project ? <Package size={15} /> : open ? <FolderOpen size={15} /> : <Folder size={15} /> : <FileText size={15} />}
+                {n.kind === 'dir' ? n.project ? <Package size={15} /> : open ? <FolderOpen size={15} /> : <Folder size={15} /> : <MarkodeIcon size={15} />}
               </span>
               <span className={`name${isMain ? ' main' : ''}`}>{n.name}</span>
               {foreign && (

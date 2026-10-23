@@ -1,8 +1,9 @@
-import { Check, ChevronRight, Copy, Eye, FileCode, FileText, GitCompare, LayoutDashboard, Moon, PanelLeftClose, PanelLeftOpen, Redo2, RotateCcw, ScrollText, Search, Settings as SettingsIcon, Sparkles, Sun, Undo2 } from 'lucide-react'
+import { Check, ChevronRight, Copy, FileCode, FileText, GitCompare, LayoutDashboard, Moon, PanelLeftClose, PanelLeftOpen, Redo2, RotateCcw, ScrollText, Search, Settings as SettingsIcon, Sparkles, Sun, Undo2 } from 'lucide-react'
 import { type CSSProperties, type PointerEvent as ReactPointerEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { api, type EditorSettings, type Feature, type ProposalLayout, type FileData, type Info, type Lang, LANG_NAMES, type SyncStatus, subscribe, type TreeData, type TreeNode } from './api'
 import { type EditHistory, Editor, type EditorCommands, NO_HISTORY } from './components/Editor'
 import { Changes, Dashboard, ProposalBanner, Rules, StatusChip } from './components/Pages'
+import { MarkodeIcon } from './components/MarkodeIcon'
 import { applySettings, DEFAULT_SETTINGS, Settings, type SettingsSection, type Theme } from './components/Settings'
 import { showMenu } from './editor/widgets'
 import { Sidebar } from './components/Sidebar'
@@ -309,7 +310,7 @@ export function App() {
           {sidebarHidden ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
         </button>
         <div className="brand">
-          markode <small>{info?.name}</small>
+          <MarkodeIcon size={20} filled /> markode <small>{info?.name}</small>
         </div>
         <nav className="tabs">
           {tabs.map((tab) => (
@@ -423,7 +424,7 @@ export function App() {
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => setMarkdownFile(markdownView ? null : selected)}
                   >
-                    {markdownView ? <FileCode size={15} /> : <Eye size={15} />}
+                    {markdownView ? <FileCode size={15} /> : <MarkodeIcon size={15} />}
                   </button>
                 </div>
               </div>
