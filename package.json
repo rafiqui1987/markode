@@ -1,6 +1,6 @@
 {
   "name": "@rafiqui987/markode",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Visual editor for CLAUDE.md, AGENTS.md and /docs — humans edit comfortably, the AI keeps reading plain Markdown.",
   "keywords": [
     "markdown",
