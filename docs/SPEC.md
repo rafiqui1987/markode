@@ -171,6 +171,17 @@ project's source language and the user's translation languages (shown with the A
 - **Sidebar**: tree of .md files, VS Code style.
   - Monorepo: **single tree**; packages with CLAUDE.md/AGENTS.md are marked as projects.
   - Right click → **ignore** folder or file. Stored in `.markodeignore` (committed to the repo).
+  - **Search** (header button) has two modes, the last one remembered: **Names** filters the tree by
+    path; **Content** searches inside every doc, VS Code style (`Ctrl+Shift+F` opens it with the
+    editor's selection).
+    - Results grouped by file with the matching line; a click opens the doc with the match selected.
+    - Toggles: match case, whole word, regex, and **ignore Markdown syntax** (on by default: matches the
+      text as it reads, without `**`, link URLs or HTML comments; the frontmatter is searched too).
+    - Files to include / exclude: comma-separated globs, `.gitignore` style. Ignored files only with
+      "show ignored". With a translation selected, it searches the translations.
+    - **Replace**: one match, one file or all files (all asks for confirmation). Only the matched text
+      changes; a match spanning Markdown syntax (`foo **bar**`) can't be replaced from the results.
+    - Results refresh when files change on disk; at most 2000 matches are shown.
 - **Breadcrumbs** at the top with the selected file's path.
 - **Language switch** (EN / second language) at the top.
 - **Editor panel**: minimal indentation, maximum usable width.
@@ -279,6 +290,7 @@ Phases are created over time as the project evolves; no fixed structure up front
 | D8 | Dashboard: phase cards (`type: phase`) with checkbox progress + documents grouped by `type` |
 | D10 | Source language configurable per project (managed section of the main doc); translations per user, multiple allowed |
 | D11 | Language detection: stopword heuristic, prose only; files under 25 words are not flagged |
+| D12 | Sidebar search: one box with Names / Content modes; content search and replace run on the server (`/api/search`, `/api/replace`) |
 | D9 | Stack: Node CLI (`src/`) + React/Vite + CodeMirror 6 web UI (`web/`), local server on port 4319 |
 
 ## 10. Next

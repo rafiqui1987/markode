@@ -1,6 +1,6 @@
 import { Check, ChevronRight, Copy, FileCode, FileText, GitCompare, LayoutDashboard, Moon, PanelLeftClose, PanelLeftOpen, Redo2, RotateCcw, ScrollText, Search, Settings as SettingsIcon, Sparkles, Sun, Undo2 } from 'lucide-react'
 import { type CSSProperties, type PointerEvent as ReactPointerEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { api, type EditorSettings, type Feature, type ProposalLayout, type FileData, type Info, type Lang, LANG_NAMES, type SyncStatus, subscribe, type TreeData, type TreeNode } from './api'
+import { api, type EditorSettings, type Feature, type ProposalLayout, type FileData, type Info, type Lang, LANG_NAMES, type Reveal, type SyncStatus, subscribe, type TreeData, type TreeNode } from './api'
 import { type EditHistory, Editor, type EditorCommands, NO_HISTORY } from './components/Editor'
 import { Changes, Dashboard, ProposalBanner, Rules, StatusChip } from './components/Pages'
 import { MarkodeIcon } from './components/MarkodeIcon'
@@ -97,10 +97,20 @@ export function App() {
   const markdownView = !!selected && markdownFile === selected
   const [editHistory, setEditHistory] = useState<EditHistory>(NO_HISTORY)
   const editorCommands = useRef<EditorCommands | null>(null)
+  /** A content search match to select in the doc it opens. */
+  const [reveal, setReveal] = useState<(Reveal & { path: string; seq: number }) | null>(null)
+  const [searchRequest, setSearchRequest] = useState<{ query: string; seq: number } | null>(null)
   // Ctrl+F / Ctrl+H open the editor's find panel even when the focus is outside the editor (which
   // handles them itself when focused), instead of the browser's find bar or history.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // Ctrl+Shift+F: search in every doc, for the text selected in the editor, as in VS Code.
+      if (!e.defaultPrevented && (e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && e.key.toLowerCase() === 'f') {
+        e.preventDefault()
+        setSidebarHidden(false)
+        setSearchRequest((r) => ({ query: editorCommands.current?.selection() ?? '', seq: (r?.seq ?? 0) + 1 }))
+        return
+      }
       if (e.defaultPrevented || !(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || !editorCommands.current) return
       const key = e.key.toLowerCase()
       if (key !== 'f' && key !== 'h') return
@@ -227,7 +237,8 @@ export function App() {
     handle.addEventListener('pointercancel', up)
   }
 
-  const open = (path: string) => {
+  const open = (path: string, at?: Reveal) => {
+    setReveal((r) => (at ? { ...at, path, seq: (r?.seq ?? 0) + 1 } : null))
     setSelected(path)
     setView('editor')
     setMarkdownFile(null)
@@ -373,6 +384,11 @@ export function App() {
         showIgnored={showIgnored}
         t={t}
         onOpen={open}
+        lang={viewLang}
+        tick={tick}
+        onOpenAt={open}
+        onBeforeReplace={async () => editorCommands.current?.flush()}
+        searchRequest={searchRequest}
         onToggleIgnored={() => setShowIgnored((s) => !s)}
         onIgnore={async (node, ignored) => {
           await api.ignore(node.path, node.kind, ignored)
@@ -481,7 +497,8 @@ export function App() {
                 onHistory={setEditHistory}
                 commands={editorCommands}
                 author={commentAs}
-                onOpenDoc={open}
+                onOpenDoc={(p) => open(p)}
+                reveal={reveal?.path === selected ? reveal : null}
                 onSaving={setSaving}
                 onSaved={(s) => {
                   setFile((f) => (f ? { ...f, status: s } : f))

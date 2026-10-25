@@ -134,9 +134,58 @@ export interface Rule {
   body: string
 }
 
-async function call<T>(method: string, url: string, body?: unknown): Promise<T> {
+/** A content search across the project's docs (see src/core/search.ts). */
+export interface SearchQuery {
+  q: string
+  case: boolean
+  word: boolean
+  regex: boolean
+  /** Match the text as it reads, without Markdown syntax. */
+  rendered: boolean
+  include: string
+  exclude: string
+  /** Also search ignored files. */
+  ignored: boolean
+}
+
+export interface SearchMatch {
+  line: number
+  col: number
+  len: number
+  preview: string
+  start: number
+  end: number
+  replaceable: boolean
+}
+
+export interface SearchResult {
+  files: { path: string; matches: SearchMatch[] }[]
+  total: number
+  truncated: boolean
+}
+
+/** Where to put the cursor when a doc opens: a match of the content search. */
+export interface Reveal {
+  line: number
+  col: number
+  len: number
+}
+
+const searchParams = (s: SearchQuery): Record<string, string> => ({
+  q: s.q,
+  case: s.case ? '1' : '',
+  word: s.word ? '1' : '',
+  regex: s.regex ? '1' : '',
+  rendered: s.rendered ? '1' : '',
+  include: s.include,
+  exclude: s.exclude,
+  ignored: s.ignored ? '1' : '',
+})
+
+async function call<T>(method: string, url: string, body?: unknown, signal?: AbortSignal): Promise<T> {
   const res = await fetch(url, {
     method,
+    signal,
     headers: body ? { 'content-type': 'application/json' } : undefined,
     body: body ? JSON.stringify(body) : undefined,
   })
@@ -166,6 +215,13 @@ export const api = {
   deletePreview: (path: string) => call<{ kind: TreeNode['kind']; files: number; md: number }>('GET', `/api/delete-preview?path=${q(path)}`),
   remove: (path: string) => call('DELETE', `/api/path?path=${q(path)}`),
   ignore: (path: string, kind: TreeNode['kind'], ignored: boolean) => call('POST', '/api/ignore', { path, kind, ignored }),
+  search: (query: SearchQuery, lang: string, signal?: AbortSignal) => {
+    const params = new URLSearchParams({ ...searchParams(query), lang })
+    return call<SearchResult>('GET', `/api/search?${params}`, undefined, signal)
+  },
+  /** `path` limits it to one file, `only` to some of its matches (`line:col` keys). */
+  replace: (query: SearchQuery, lang: string, replacement: string, path?: string, only?: string[]) =>
+    call<{ replaced: number; files: string[] }>('POST', '/api/replace', { ...searchParams(query), lang, replacement, path, only }),
   diff: (path: string) => call<{ diff: string }>('GET', `/api/diff?path=${q(path)}`),
   dashboard: () => call<{ docs: DocSummary[]; sdd: SddSummary }>('GET', '/api/dashboard'),
   rules: () => call<{ rules: Rule[]; applied: string[]; mainDoc: string | null }>('GET', '/api/rules'),

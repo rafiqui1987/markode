@@ -1,7 +1,8 @@
 import { ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, Copy, Eye, EyeOff, FilePlus, Folder, FolderOpen, FolderPlus, Package, Search, Trash2, X } from 'lucide-react'
+import { ContentSearch } from './ContentSearch'
 import { MarkodeIcon } from './MarkodeIcon'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { type GitStatus, type Lang, LANG_NAMES, type SyncStatus, type TreeNode } from '../api'
+import { type GitStatus, type Lang, LANG_NAMES, type Reveal, type SyncStatus, type TreeNode } from '../api'
 import type { T } from '../i18n'
 
 interface Props {
@@ -19,7 +20,19 @@ interface Props {
   /** Resolves to the created path, or null when it failed. */
   onCreate: (dir: string, name: string, kind: TreeNode['kind']) => Promise<string | null>
   onDelete: (node: TreeNode) => void
+  /** Language the docs are viewed in: the content search looks in that language's files. */
+  lang: string
+  /** Bumped when files change on disk. */
+  tick: number
+  /** Opens a doc with a content search match selected. */
+  onOpenAt: (path: string, at: Reveal) => void
+  onBeforeReplace: () => Promise<void>
+  /** Ctrl+Shift+F: open the content search, with this text when it isn't empty. */
+  searchRequest: { query: string; seq: number } | null
 }
+
+type SearchMode = 'names' | 'content'
+const MODE_KEY = 'markode.searchMode'
 
 const EXPANDED_KEY = 'markode.expanded'
 
@@ -84,12 +97,21 @@ export function Sidebar(props: Props) {
   const [menu, setMenu] = useState<{ x: number; y: number; node: TreeNode | null } | null>(null)
   const [searching, setSearching] = useState(false)
   const [query, setQuery] = useState('')
+  const [mode, setMode] = useState<SearchMode>(() => {
+    try {
+      return localStorage.getItem(MODE_KEY) === 'content' ? 'content' : 'names'
+    } catch {
+      return 'names'
+    }
+  })
   const searchInput = useRef<HTMLInputElement>(null)
   const [draft, setDraft] = useState<{ dir: string; kind: TreeNode['kind'] } | null>(null)
   // Last clicked item, as in VS Code: the header's "new" buttons create next to it (or inside, for a folder).
   const [focused, setFocused] = useState<Pick<TreeNode, 'kind' | 'path'> | null>(null)
   const selectedNode = focused ?? (selected ? { kind: 'file' as const, path: selected } : null)
-  const q = query.trim().toLowerCase()
+  const content = searching && mode === 'content'
+  // The name filter only applies to the tree; the content search has its own results.
+  const q = content ? '' : query.trim().toLowerCase()
   const visible = useMemo(() => (q ? filterTree(tree, q) : tree), [tree, q])
   const anyExpanded = expanded.size > 0
 
@@ -97,6 +119,40 @@ export function Sidebar(props: Props) {
     setSearching(false)
     setQuery('')
   }
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(MODE_KEY, mode)
+    } catch {}
+  }, [mode])
+
+  useEffect(() => {
+    if (!props.searchRequest) return
+    setSearching(true)
+    setMode('content')
+    if (props.searchRequest.query) setQuery(props.searchRequest.query)
+    // After the input mounts (it may not exist yet).
+    setTimeout(() => searchInput.current?.select())
+  }, [props.searchRequest?.seq])
+
+  const modes = (
+    <div className="search-modes" role="tablist">
+      {(['names', 'content'] as const).map((m) => (
+        <button
+          key={m}
+          role="tab"
+          aria-selected={mode === m}
+          className={mode === m ? 'active' : ''}
+          onClick={() => {
+            setMode(m)
+            setTimeout(() => searchInput.current?.focus())
+          }}
+        >
+          {t(m === 'names' ? 'search.modeNames' : 'search.modeContent')}
+        </button>
+      ))}
+    </div>
+  )
 
   useEffect(() => {
     try {
@@ -225,7 +281,24 @@ export function Sidebar(props: Props) {
           <Search size={15} />
         </button>
       </div>
-      {searching && (
+      {content && (
+        <ContentSearch
+          query={query}
+          onQuery={setQuery}
+          input={searchInput}
+          onClose={closeSearch}
+          modes={modes}
+          selected={selected}
+          showIgnored={showIgnored}
+          lang={props.lang}
+          tick={props.tick}
+          t={t}
+          onOpen={props.onOpenAt}
+          onBeforeReplace={props.onBeforeReplace}
+        />
+      )}
+      {searching && !content && modes}
+      {searching && !content && (
         <div className="sidebar-search">
           <Search size={13} />
           <input
@@ -243,10 +316,12 @@ export function Sidebar(props: Props) {
           )}
         </div>
       )}
-      <ul className="tree">
-        {draftRow('', 0)}
-        {render(visible, 0)}
-      </ul>
+      {!content && (
+        <ul className="tree">
+          {draftRow('', 0)}
+          {render(visible, 0)}
+        </ul>
+      )}
       {q && !visible.length && <div className="sidebar-empty">{t('app.noResults')}</div>}
 
       {menu && (

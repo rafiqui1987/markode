@@ -2,7 +2,7 @@ import { isolateHistory, redo, redoDepth, undo, undoDepth } from '@codemirror/co
 import { ChangeSet, EditorState, Transaction } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 import { type MutableRefObject, useEffect, useRef } from 'react'
-import { api, type FileData, type SyncStatus } from '../api'
+import { api, type FileData, type Reveal, type SyncStatus } from '../api'
 import { openSearchPanel } from '@codemirror/search'
 import { copyMarkdown } from '../editor/copy'
 import { openReplace } from '../editor/searchPanel'
@@ -39,6 +39,8 @@ interface Props {
   author?: string | null
   /** Opens a project document: where clicking a relative link to a `.md` file goes. */
   onOpenDoc?: (path: string) => void
+  /** Text to select and scroll to (a content search match); a new `seq` reveals it again. */
+  reveal?: (Reveal & { seq: number }) | null
 }
 
 export interface EditHistory {
@@ -57,6 +59,20 @@ export interface EditorCommands {
   copy: (formatted: boolean) => Promise<void>
   /** Set a frontmatter field (e.g. a proposal's status), as one undoable change. */
   setField: (key: string, value: string) => void
+  /** The selected text, when it is on one line (what Ctrl+Shift+F searches for). */
+  selection: () => string
+  /** Save pending edits now. */
+  flush: () => Promise<void>
+}
+
+/** Select a match and bring it to the middle of the screen. */
+function revealIn(v: EditorView, r: Reveal) {
+  const doc = v.state.doc
+  const line = doc.line(Math.min(Math.max(r.line, 1), doc.lines))
+  const from = Math.min(line.from + r.col, line.to)
+  const to = Math.min(from + r.len, line.to)
+  v.dispatch({ selection: { anchor: from, head: to }, effects: EditorView.scrollIntoView(from, { y: 'center' }) })
+  v.focus()
 }
 
 /** The change that sets `key: value` in the doc's frontmatter, or null if it has none. */
@@ -84,7 +100,7 @@ function revertChanges(state: EditorState): ChangeSet {
   return changes
 }
 
-export function Editor({ path, lang, t, layoutKey, wrap, visual = true, theme, externalTick, onLoaded, onSaving, onSaved, onHistory, commands, io, readOnly, author = null, onOpenDoc }: Props) {
+export function Editor({ path, lang, t, layoutKey, wrap, visual = true, theme, externalTick, onLoaded, onSaving, onSaved, onHistory, commands, io, readOnly, author = null, onOpenDoc, reveal }: Props) {
   const host = useRef<HTMLDivElement>(null)
   const view = useRef<EditorView | null>(null)
   const file = useRef<FileData | null>(null)
@@ -97,6 +113,8 @@ export function Editor({ path, lang, t, layoutKey, wrap, visual = true, theme, e
   const callbacks = useRef({ onLoaded, onSaving, onSaved, onHistory, onOpenDoc })
   callbacks.current = { onLoaded, onSaving, onSaved, onHistory, onOpenDoc }
   const load = () => (io ? io.load() : api.file(path, lang))
+  const revealRef = useRef(reveal)
+  revealRef.current = reveal
   const historyKey = useRef('')
   const reportHistory = (state: EditorState | null) => {
     const depth = state ? `${undoDepth(state)}|${redoDepth(state)}` : ''
@@ -166,7 +184,14 @@ export function Editor({ path, lang, t, layoutKey, wrap, visual = true, theme, e
           const change = fieldChange(v.state.doc.toString(), key, value)
           if (change) v.dispatch({ changes: change, annotations: isolateHistory.of('full') })
         },
+        selection: () => {
+          const { from, to } = v.state.selection.main
+          const text = v.state.sliceDoc(from, to)
+          return text.includes('\n') ? '' : text
+        },
+        flush,
       }
+      if (revealRef.current) revealIn(v, revealRef.current)
     })
     return () => {
       cancelled = true
@@ -195,6 +220,10 @@ export function Editor({ path, lang, t, layoutKey, wrap, visual = true, theme, e
       v.dispatch({ changes: { from: 0, to: current.length, insert: data.content }, selection: { anchor: head }, annotations: [externalChange.of(true), Transaction.addToHistory.of(false)] })
     })
   }, [externalTick])
+
+  useEffect(() => {
+    if (view.current && reveal) revealIn(view.current, reveal)
+  }, [reveal?.seq])
 
   useEffect(() => {
     view.current?.requestMeasure()

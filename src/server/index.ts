@@ -11,7 +11,8 @@ import { summarize } from '../core/dashboard.js'
 import { gitDiff, gitStatuses, isGitRepo } from '../core/git.js'
 import { allStatuses, fileStatus, foreignFiles, keepLanguage, syncReport, translationPath } from '../core/i18n.js'
 import { appliedRuleIds, applyRulesToFile, deleteRule, listRules, projectSourceLang, saveRule } from '../core/rules.js'
-import { scanTree, setIgnored, watchSkips } from '../core/scan.js'
+import { flattenFiles, scanTree, setIgnored, watchSkips } from '../core/scan.js'
+import { buildRegex, pathFilter, QueryError, replaceText, type SearchOptions, searchFiles } from '../core/search.js'
 import { activateProposals, authorName, deactivateProposals, proposalsState } from '../core/proposals.js'
 import { sddPrefixes, summarizeSdd } from '../core/sdd.js'
 import { linkMainDocs, missingMainDocs } from '../core/scaffold.js'
@@ -124,6 +125,38 @@ export async function startServer({ root, port, open: openBrowser }: Options) {
     return file
   }
 
+  /** A content search, from the query string of GET /api/search or the body of POST /api/replace. */
+  const searchOptions = (o: Record<string, unknown>): SearchOptions => {
+    const flag = (v: unknown) => v === true || v === '1' || v === 'true'
+    return {
+      query: typeof o.q === 'string' ? o.q : '',
+      caseSensitive: flag(o.case),
+      wholeWord: flag(o.word),
+      regex: flag(o.regex),
+      rendered: flag(o.rendered),
+      include: typeof o.include === 'string' ? o.include : '',
+      exclude: typeof o.exclude === 'string' ? o.exclude : '',
+    }
+  }
+
+  /** The docs a search covers, each with the file holding the text shown for it in that language. */
+  const searchable = (o: Record<string, unknown>) => {
+    const l = viewLang(o.lang)
+    return flattenFiles(scanTree(root), o.ignored === true || o.ignored === '1').map((n) => {
+      const tPath = l ? translationFile(l, n.path) : null
+      return { path: n.path, file: tPath && fs.existsSync(tPath) ? tPath : safeResolve(root, n.path), translation: !!tPath && fs.existsSync(tPath) }
+    })
+  }
+
+  const search = (o: Record<string, unknown>) => {
+    try {
+      return searchFiles(searchable(o), searchOptions(o))
+    } catch (err) {
+      if (err instanceof QueryError) throw new HttpError(400, err.message)
+      throw err
+    }
+  }
+
   const routes: Record<string, (url: URL, body: any) => unknown> = {
     'GET /api/info': () => {
       const c = config()
@@ -183,6 +216,36 @@ export async function startServer({ root, port, open: openBrowser }: Options) {
       // Files in another language are work for the agent's translations: without them, nothing to flag.
       const foreign = featureState(root).translations ? Object.fromEntries(foreignFiles(root, sourceLang()).map((f) => [f.path, f.detected])) : {}
       return { tree: scanTree(root), git: gitStatuses(root), sync, foreign }
+    },
+    'GET /api/search': (url) => search(Object.fromEntries(url.searchParams)),
+    /**
+     * Replace the matches of a search: in every file, in one (`path`), or only some of its matches
+     * (`only`: `line:col` keys). Only the matched text changes in each file.
+     */
+    'POST /api/replace': (_, body) => {
+      const o = searchOptions(body)
+      if (!o.query) throw new HttpError(400, 'Expected a query')
+      const replacement = String(body.replacement ?? '')
+      const only = Array.isArray(body.only) ? new Set<string>(body.only.map(String)) : undefined
+      try {
+        buildRegex(o)
+      } catch (err) {
+        throw new HttpError(400, (err as Error).message)
+      }
+      const passes = pathFilter(o.include, o.exclude)
+      const files = searchable(body).filter((f) => passes(f.path) && (typeof body.path !== 'string' || f.path === body.path))
+      let replaced = 0
+      const changed: string[] = []
+      for (const f of files) {
+        const before = fs.readFileSync(f.file, 'utf8')
+        const { text, count } = replaceText(before, o, replacement, only)
+        if (!count || text === before) continue
+        if (!f.translation && featureState(root).agent) logSave(root, f.path, before, text)
+        fs.writeFileSync(f.file, text)
+        replaced += count
+        changed.push(f.path)
+      }
+      return { replaced, files: changed }
     },
     'POST /api/keep-language': (_, body) => ({ lang: keepLanguage(root, mdPath(body.path)) }),
     'GET /api/file': (url) => {
