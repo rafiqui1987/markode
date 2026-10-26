@@ -218,7 +218,8 @@ project's source language and the user's translation languages (shown with the A
     language, or a small tag icon with the marker on hover.
 - **Actions** at the top right: undo, redo, discard changes, find and replace (also `Ctrl+F`/`Ctrl+H`
   with the focus anywhere in the app, instead of the browser's), copy (the selection or the whole document,
-  as Markdown or as formatted text for Word/Docs/mail) and the markode/Markdown view switch.
+  as Markdown or as formatted text for Word/Docs/mail), PDF export (A4 or A3, portrait or landscape, through
+  the browser's print dialog with the paper already set) and the markode/Markdown view switch.
 - Files are saved **exactly** as written (no reformatting) → clean diffs, readable by the AI.
 - **Colors per element type**: headings (one tone per level), inline code and code blocks, lists,
   checkboxes, tables, links, frontmatter.

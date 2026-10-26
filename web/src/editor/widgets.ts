@@ -132,6 +132,18 @@ function loadMermaid(theme: Theme) {
   return mermaidReady
 }
 
+/** A diagram for print: mermaid's own light theme; the editor's palette is set again on its next render. */
+export async function printMermaidSvg(code: string): Promise<string> {
+  const m = (await import('mermaid')).default
+  m.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'default', fontFamily: 'Inter, system-ui, sans-serif' })
+  try {
+    return (await m.render(`markode-print-${++mermaidSeq}`, code)).svg
+  } finally {
+    mermaidReady = null
+    mermaidTheme = null
+  }
+}
+
 export class MermaidWidget extends WidgetType {
   constructor(
     readonly code: string,

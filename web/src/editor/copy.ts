@@ -1,7 +1,7 @@
 import { marked } from 'marked'
 
 /** Frontmatter and HTML comments (comment threads, choice markers) are markode's notes, not content. */
-function content(md: string, fromStart: boolean) {
+export function content(md: string, fromStart: boolean) {
   const body = fromStart ? md.replace(/^---\r?\n[\s\S]*?\r?\n---[ \t]*(\r?\n|$)/, '') : md
   return body.replace(/^[ \t]*<!--[\s\S]*?-->[ \t]*\r?\n?/gm, '').replace(/<!--[\s\S]*?-->/g, '')
 }

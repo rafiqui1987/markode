@@ -133,8 +133,8 @@ to edit them. One button switches the open file to the **Markdown view** (plain 
 keeping your place; every file opens in the markode view.
 
 The toolbar next to the breadcrumb has undo, redo, **discard** (back to how the file was when you
-opened it), **find and replace** (`Ctrl+F`, `Ctrl+H`) and **copy** as Markdown or as formatted text
-for an email or a chat.
+opened it), **find and replace** (`Ctrl+F`, `Ctrl+H`), **copy** as Markdown or as formatted text
+for an email or a chat, and **PDF** export in A4 or A3, portrait or landscape.
 
 ### 3. Formatting without remembering syntax
 

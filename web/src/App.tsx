@@ -4,6 +4,7 @@ import { api, type EditorSettings, type Feature, type ProposalLayout, type FileD
 import { type EditHistory, Editor, type EditorCommands, NO_HISTORY } from './components/Editor'
 import { Changes, Dashboard, ProposalBanner, Rules, StatusChip } from './components/Pages'
 import { MarkodeIcon } from './components/MarkodeIcon'
+import { PdfExport } from './components/PdfExport'
 import { applySettings, DEFAULT_SETTINGS, Settings, type SettingsSection, type Theme } from './components/Settings'
 import { showMenu } from './editor/widgets'
 import { Sidebar } from './components/Sidebar'
@@ -449,6 +450,7 @@ export function App() {
                   >
                     {copiedDoc ? <Check size={15} /> : <Copy size={15} />}
                   </button>
+                  <PdfExport t={t} onExport={(size, orientation) => editorCommands.current?.pdf(size, orientation) ?? Promise.resolve()} />
                   <span className="sep" />
                   {/* Like the theme button: the icon is the current view, the title says what a click does. */}
                   <button
