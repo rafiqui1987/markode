@@ -1,6 +1,6 @@
 {
   "name": "@rafiqui987/markode",
-  "version": "0.4.5",
+  "version": "0.4.6",
   "description": "WYSIWYG Markdown editor for CLAUDE.md, AGENTS.md and /docs, with Mermaid diagrams and PDF export — humans edit comfortably, the AI keeps reading plain Markdown.",
   "keywords": [
     "markdown",
