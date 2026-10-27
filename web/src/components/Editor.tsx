@@ -5,7 +5,7 @@ import { type MutableRefObject, useEffect, useRef } from 'react'
 import { api, type FileData, type Reveal, type SyncStatus } from '../api'
 import { openSearchPanel } from '@codemirror/search'
 import { copyMarkdown } from '../editor/copy'
-import { type Orientation, type PaperSize, printPdf } from '../editor/pdf'
+import { type Orientation, type PaperSize, type PdfStyle, printPdf } from '../editor/pdf'
 import { openReplace } from '../editor/searchPanel'
 import { livePreview, openDoc, setTheme } from '../editor/livePreview'
 import { editorExtensions, externalChange, previewing, wrapping } from '../editor/setup'
@@ -58,8 +58,8 @@ export interface EditorCommands {
   find: (replace?: boolean) => void
   /** Copy the selection, or the whole document, as Markdown or as formatted text. */
   copy: (formatted: boolean) => Promise<void>
-  /** Print the whole document to PDF, on the given paper. */
-  pdf: (size: PaperSize, orientation: Orientation) => Promise<void>
+  /** Print the whole document to PDF, on the given paper and in the given style. */
+  pdf: (size: PaperSize, orientation: Orientation, style: PdfStyle) => Promise<void>
   /** Set a frontmatter field (e.g. a proposal's status), as one undoable change. */
   setField: (key: string, value: string) => void
   /** The selected text, when it is on one line (what Ctrl+Shift+F searches for). */
@@ -183,7 +183,7 @@ export function Editor({ path, lang, t, layoutKey, wrap, visual = true, theme, e
           const whole = from === to
           return copyMarkdown(whole ? v.state.doc.toString() : v.state.sliceDoc(from, to), formatted, whole || from === 0)
         },
-        pdf: (size, orientation) => printPdf(v.state.doc.toString(), path, size, orientation),
+        pdf: (size, orientation, style) => printPdf(v.state.doc.toString(), path, size, orientation, style),
         setField: (key, value) => {
           const change = fieldChange(v.state.doc.toString(), key, value)
           if (change) v.dispatch({ changes: change, annotations: isolateHistory.of('full') })

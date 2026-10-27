@@ -1,6 +1,6 @@
 import { FileDown } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import type { Orientation, PaperSize } from '../editor/pdf'
+import type { Orientation, PaperSize, PdfStyle } from '../editor/pdf'
 import type { T } from '../i18n'
 
 const store = {
@@ -18,11 +18,12 @@ const store = {
   },
 }
 
-/** The toolbar's PDF button: paper size and orientation (remembered per browser), then download. */
-export function PdfExport({ t, onExport }: { t: T; onExport: (size: PaperSize, orientation: Orientation) => Promise<void> }) {
+/** The toolbar's PDF button: paper size, orientation and style (remembered per browser), then download. */
+export function PdfExport({ t, onExport }: { t: T; onExport: (size: PaperSize, orientation: Orientation, style: PdfStyle) => Promise<void> }) {
   const [open, setOpen] = useState(false)
   const [size, setSize] = useState<PaperSize>(store.get('markode.pdfSize') === 'A3' ? 'A3' : 'A4')
   const [orientation, setOrientation] = useState<Orientation>(store.get('markode.pdfOrientation') === 'landscape' ? 'landscape' : 'portrait')
+  const [style, setStyle] = useState<PdfStyle>(store.get('markode.pdfStyle') === 'simple' ? 'simple' : 'markode')
   const [busy, setBusy] = useState(false)
   const box = useRef<HTMLDivElement>(null)
 
@@ -41,9 +42,10 @@ export function PdfExport({ t, onExport }: { t: T; onExport: (size: PaperSize, o
   const download = async () => {
     store.set('markode.pdfSize', size)
     store.set('markode.pdfOrientation', orientation)
+    store.set('markode.pdfStyle', style)
     setBusy(true)
     try {
-      await onExport(size, orientation)
+      await onExport(size, orientation, style)
       setOpen(false)
     } catch (err) {
       alert((err as Error).message)
@@ -75,6 +77,16 @@ export function PdfExport({ t, onExport }: { t: T; onExport: (size: PaperSize, o
               {(['portrait', 'landscape'] as const).map((o) => (
                 <button key={o} className={orientation === o ? 'active' : ''} onClick={() => setOrientation(o)}>
                   {t(`pdf.${o}`)}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="pdf-row">
+            <span>{t('pdf.style')}</span>
+            <div className="segmented">
+              {(['markode', 'simple'] as const).map((s) => (
+                <button key={s} className={style === s ? 'active' : ''} title={t(`pdf.${s}Hint`)} onClick={() => setStyle(s)}>
+                  {t(`pdf.${s}`)}
                 </button>
               ))}
             </div>

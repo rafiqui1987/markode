@@ -134,7 +134,7 @@ keeping your place; every file opens in the markode view.
 
 The toolbar next to the breadcrumb has undo, redo, **discard** (back to how the file was when you
 opened it), **find and replace** (`Ctrl+F`, `Ctrl+H`), **copy** as Markdown or as formatted text
-for an email or a chat, and **PDF** export in A4 or A3, portrait or landscape.
+for an email or a chat, and **PDF** export in A4 or A3, portrait or landscape, in markode's colors or plain.
 
 ### 3. Formatting without remembering syntax
 

@@ -93,38 +93,42 @@ const lastSvg = new Map<string, string>()
 
 export type Theme = 'light' | 'dark'
 
+/** Mermaid's variables for markode's palette; `v` reads a color token. */
+function mermaidPalette(v: (name: string) => string, dark: boolean) {
+  return {
+    darkMode: dark,
+    fontSize: '15px',
+    background: v('--panel'),
+    primaryColor: v('--panel-2'),
+    primaryTextColor: v('--text'),
+    primaryBorderColor: v('--accent'),
+    secondaryColor: v('--panel-2'),
+    tertiaryColor: v('--panel'),
+    lineColor: v('--muted'),
+    textColor: v('--text'),
+    edgeLabelBackground: v('--panel'),
+    actorBkg: v('--panel-2'),
+    actorBorder: v('--accent'),
+    actorTextColor: v('--text'),
+    signalColor: v('--muted'),
+    signalTextColor: v('--text'),
+    noteBkgColor: v('--panel-2'),
+    noteTextColor: v('--text'),
+  }
+}
+
 function loadMermaid(theme: Theme) {
   if (!mermaidReady || mermaidTheme !== theme) {
     mermaidTheme = theme
     mermaidReady = import('mermaid').then((m) => {
       // Diagram colors follow the app palette instead of mermaid's own themes.
       const css = getComputedStyle(document.documentElement)
-      const v = (name: string) => css.getPropertyValue(name).trim()
       m.default.initialize({
         startOnLoad: false,
         securityLevel: 'strict',
         theme: 'base',
         fontFamily: 'Inter, system-ui, sans-serif',
-        themeVariables: {
-          darkMode: theme === 'dark',
-          fontSize: '15px',
-          background: v('--panel'),
-          primaryColor: v('--panel-2'),
-          primaryTextColor: v('--text'),
-          primaryBorderColor: v('--accent'),
-          secondaryColor: v('--panel-2'),
-          tertiaryColor: v('--panel'),
-          lineColor: v('--muted'),
-          textColor: v('--text'),
-          edgeLabelBackground: v('--panel'),
-          actorBkg: v('--panel-2'),
-          actorBorder: v('--accent'),
-          actorTextColor: v('--text'),
-          signalColor: v('--muted'),
-          signalTextColor: v('--text'),
-          noteBkgColor: v('--panel-2'),
-          noteTextColor: v('--text'),
-        },
+        themeVariables: mermaidPalette((name) => css.getPropertyValue(name).trim(), theme === 'dark'),
       })
       return m.default
     })
@@ -132,10 +136,18 @@ function loadMermaid(theme: Theme) {
   return mermaidReady
 }
 
-/** A diagram for print: mermaid's own light theme; the editor's palette is set again on its next render. */
-export async function printMermaidSvg(code: string): Promise<string> {
+/**
+ * A diagram for print: in markode's light palette when given its tokens, else mermaid's own light theme.
+ * The editor's palette is set again on its next render.
+ */
+export async function printMermaidSvg(code: string, tokens?: Record<string, string>): Promise<string> {
   const m = (await import('mermaid')).default
-  m.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'default', fontFamily: 'Inter, system-ui, sans-serif' })
+  m.initialize({
+    startOnLoad: false,
+    securityLevel: 'strict',
+    fontFamily: 'Inter, system-ui, sans-serif',
+    ...(tokens ? { theme: 'base', themeVariables: mermaidPalette((name) => tokens[name] ?? '', false) } : { theme: 'default' }),
+  })
   try {
     return (await m.render(`markode-print-${++mermaidSeq}`, code)).svg
   } finally {

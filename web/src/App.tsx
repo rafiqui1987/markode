@@ -450,7 +450,7 @@ export function App() {
                   >
                     {copiedDoc ? <Check size={15} /> : <Copy size={15} />}
                   </button>
-                  <PdfExport t={t} onExport={(size, orientation) => editorCommands.current?.pdf(size, orientation) ?? Promise.resolve()} />
+                  <PdfExport t={t} onExport={(size, orientation, style) => editorCommands.current?.pdf(size, orientation, style) ?? Promise.resolve()} />
                   <span className="sep" />
                   {/* Like the theme button: the icon is the current view, the title says what a click does. */}
                   <button
