@@ -1,7 +1,10 @@
+import fs from 'node:fs'
 import * as p from '@clack/prompts'
 import pc from 'picocolors'
 import { isLang, isLangCode, LANG_NAMES, langName, LANGS, readConfig, writeConfig } from '../core/config.js'
 import { projectSourceLang } from '../core/rules.js'
+import { apply, plan, pruneCache, queue } from '../core/translation.js'
+import { flattenFiles, scanTree } from '../core/scan.js'
 
 function check<T>(value: T): Exclude<T, symbol> {
   if (p.isCancel(value)) {
@@ -67,8 +70,39 @@ export async function runTranslate(root: string) {
   p.outro(
     [
       `Translations: ${langs.map((l) => langName(l, { ...config, langNames: names })).join(', ')}.`,
-      `Ask your agent for ${pc.cyan('/markode translate')} to translate the docs; then pick the language at the top of markode.`,
+      `In Chrome or Edge, markode translates them by itself while it is open; otherwise ask your agent for ${pc.cyan('/markode translate')}. Then pick the language at the top of markode.`,
       ...(langs.some((l) => !isLang(l)) ? ['Menus stay in English for languages typed by hand.'] : []),
     ].join('\n'),
   )
+}
+
+const pathArgs = (args: string[]) => args.slice(1).filter((a, i, all) => !a.startsWith('--') && !['--lang', '--apply'].includes(all[i - 1]))
+
+/** The translations to do: missing or outdated, in the enabled languages (or `--lang`), for `paths` (or all). */
+function work(root: string, lang: string | undefined, paths: string[]) {
+  const config = readConfig(root)
+  const source = projectSourceLang(root, config?.mainDoc)
+  const langs = (config?.langs ?? []).filter((l) => l !== source && (!lang || l === lang))
+  return { source, names: Object.fromEntries((config?.langs ?? []).map((l) => [l, langName(l, config)])), files: queue(root, langs).filter((f) => !paths.length || paths.includes(f.path)) }
+}
+
+/** `markode translate --segments` / `--apply`: the segments still to translate, for the agent's `/markode translate`. */
+export function runSegments(root: string, args: string[], option: (name: string) => string | undefined, flag: (name: string) => boolean) {
+  const { source, names, files } = work(root, option('--lang'), pathArgs(args))
+
+  if (flag('--segments')) {
+    const out = files.map((f) => ({ ...f, pending: plan(root, f.path, f.lang) })).filter((f) => f.pending.length)
+    return console.log(JSON.stringify({ sourceLang: source, names, files: out }, null, 2))
+  }
+
+  // { "<lang>": { "<key>": "<translated text>" } }: keys are per language, so one map serves every file.
+  const all = JSON.parse(fs.readFileSync(option('--apply')!, 'utf8')) as Record<string, Record<string, string>>
+  for (const f of files) {
+    const res = apply(root, f.path, f.lang, all[f.lang] ?? {})
+    const note = res.rejected.length ? ` (${res.rejected.length} lost a placeholder: translate them again)` : res.missing ? ` (${res.missing} segments missing)` : ''
+    console.log(`${res.written ? 'written' : 'pending'} ${f.lang} ${f.path}${note}`)
+  }
+  // Segments no doc uses any more.
+  const docs = flattenFiles(scanTree(root)).map((f) => f.path)
+  for (const lang of Object.keys(all)) if (names[lang]) pruneCache(root, lang, docs)
 }

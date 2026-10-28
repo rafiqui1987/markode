@@ -12,6 +12,24 @@ export interface EditorSettings {
   width: 'full' | 'readable'
   wrap: boolean
   uiLang: string
+  /** `auto`: the browser's engine when it has one, otherwise the agent. */
+  engine: TranslationEngine
+}
+export type TranslationEngine = 'auto' | 'browser' | 'agent'
+/** A segment an engine has to translate (see src/core/translation.ts). */
+export interface Pending {
+  key: string
+  text: string
+  terms: Record<string, string>
+}
+export interface Glossary {
+  keep: string[]
+  terms: Record<string, Record<string, string>>
+}
+export interface ApplyResult {
+  missing: number
+  rejected: string[]
+  written: boolean
 }
 
 export interface TreeNode {
@@ -233,10 +251,25 @@ export const api = {
   skillFile: (key: string) => call<FileData>('GET', `/api/skills/file?key=${q(key)}`),
   saveSkillFile: (key: string, content: string) => call<{ status: null }>('PUT', '/api/skills/file', { key, content }),
   installSkill: (key: string, targets: ProjectTarget[], overwrite: boolean) => call('POST', '/api/skills/install', { key, targets, overwrite }),
+  translateQueue: () => call<{ files: { path: string; lang: string }[] }>('GET', '/api/translate/queue'),
+  translatePlan: (path: string, lang: string) => call<{ from: string; status: SyncStatus; pending: Pending[] }>('GET', `/api/translate/plan?path=${q(path)}&lang=${q(lang)}`),
+  translateApply: (path: string, lang: string, results: Record<string, string>, partial = false) => call<ApplyResult>('POST', '/api/translate/apply', { path, lang, results, partial }),
+  backPlan: (path: string, lang: string) => call<{ from: string; pending: Pending[]; structural: boolean }>('GET', `/api/translate/back?path=${q(path)}&lang=${q(lang)}`),
+  backPropose: (path: string, lang: string, results: Record<string, string>) =>
+    call<{ source: string; changes: { before: string; after: string }[]; rejected: string[] }>('POST', '/api/translate/back', { path, lang, results }),
+  /** A proposal answered in a translation: bring the answer to the source. */
+  carryAnswer: (path: string, lang: string) => call('POST', '/api/proposal/answer', { path, lang }),
+  backAccept: (path: string, lang: string, results: Record<string, string>) => call('POST', '/api/translate/back', { path, lang, results, accept: true }),
+  glossary: () => call<Glossary>('GET', '/api/glossary'),
+  saveGlossary: (g: Glossary) => call<Glossary>('PUT', '/api/glossary', g),
+  uiLangs: () => call<Record<string, string>>('GET', '/api/ui-langs'),
+  uiStrings: (lang: string) => call<{ name: string; strings: Record<string, string> }>('GET', `/api/ui-strings?lang=${q(lang)}`),
+  saveUiStrings: (lang: string, name: string, strings: Record<string, string>) => call('PUT', '/api/ui-strings', { lang, name, strings }),
 }
 
 /** Live file-system events from the server, and docs to show (`open`); reconnects on drop. */
-export function subscribe(onEvent: (e: { type: 'fs' | 'open'; event?: string; path: string }) => void) {
+/** `lang`: the event is about that translation of the doc, not the doc itself. */
+export function subscribe(onEvent: (e: { type: 'fs' | 'open'; event?: string; path: string; lang?: string }) => void) {
   let ws: WebSocket
   let closed = false
   const connect = () => {

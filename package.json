@@ -51,6 +51,7 @@
     "dev": "concurrently -k -n server,web -c blue,magenta \"tsx watch src/cli/index.ts serve --port 4319 --no-open\" \"vite\"",
     "build": "vite build && tsup",
     "typecheck": "tsc --noEmit",
+    "test": "tsx --test \"src/**/*.test.ts\"",
     "start": "node dist/cli.js",
     "sandbox": "node scripts/sandbox.mjs"
   },

@@ -1,8 +1,9 @@
 import { Bot, Check, Copy, EyeOff, Languages, LayoutDashboard, MessageSquare, Radio, RotateCcw, ScrollText, SlidersHorizontal, Sparkles, ToggleRight, Type, X } from 'lucide-react'
 import { MarkodeIcon } from './MarkodeIcon'
 import { useEffect, useState } from 'react'
-import { type EditorSettings, type Feature, FEATURES, type Info, type Lang, LANG_NAMES, LANGS, type ProposalLayout, REQUIRES } from '../api'
-import { type T, type TKey, UI_LANGS } from '../i18n'
+import { api, type EditorSettings, type Feature, FEATURES, type Glossary, type Info, type Lang, LANG_NAMES, LANGS, type ProposalLayout, REQUIRES, type TranslationEngine } from '../api'
+import { EN_STRINGS, type T, type TKey, UI_LANGS } from '../i18n'
+import { browserEngineSupported, resolveEngine, translateUi } from '../translate'
 
 export const FONTS: Record<string, { label: string; stack: string }> = {
   inter: { label: 'Inter', stack: "'Inter', system-ui, sans-serif" },
@@ -14,7 +15,16 @@ export const FONTS: Record<string, { label: string; stack: string }> = {
   system: { label: 'System', stack: "system-ui, -apple-system, 'Segoe UI', sans-serif" },
 }
 
-export const DEFAULT_SETTINGS: EditorSettings = { font: 'inter', size: 15, lineHeight: 1.65, padding: 28, width: 'full', wrap: true, uiLang: 'en' }
+export const DEFAULT_SETTINGS: EditorSettings = {
+  font: 'inter',
+  size: 15,
+  lineHeight: 1.65,
+  padding: 28,
+  width: 'full',
+  wrap: true,
+  uiLang: 'en',
+  engine: 'auto',
+}
 
 /** Editor settings are applied as CSS variables, so every view picks them up at once. */
 export function applySettings(s: EditorSettings) {
@@ -44,6 +54,8 @@ interface Props {
   pendingTranslations: number
   onProposals: (active: boolean, layout: ProposalLayout) => void
   onFeature: (feature: Feature, on: boolean) => void
+  /** Strings of a generated interface language were (re)written. */
+  onUiStrings: () => void
   onClose: () => void
 }
 
@@ -186,6 +198,148 @@ function AddLanguage({ t, info, onAdd }: { t: T; info: Info; onAdd: (code: strin
   )
 }
 
+const ENGINE_LABEL: Record<TranslationEngine, TKey> = { auto: 'settings.engineAuto', browser: 'settings.engineBrowser', agent: 'settings.engineAgent' }
+
+/** Which engine translates the docs: the browser's built-in translator, or the agent. */
+function EngineSettings({ t, settings, set }: { t: T; settings: EditorSettings; set: (patch: Partial<EditorSettings>) => void }) {
+  const hint: Record<TranslationEngine, string> = {
+    auto: t('settings.engineHintAuto', { engine: t(ENGINE_LABEL[resolveEngine('auto')]) }),
+    browser: browserEngineSupported() ? t('settings.engineHintBrowser') : t('settings.engineHintBrowserOff'),
+    agent: t('settings.engineHintAgent'),
+  }
+  return (
+    <>
+      <div className="set-row">
+        <span className="set-label">{t('settings.engine')}</span>
+        <div className="segmented">
+          {(['auto', 'browser', 'agent'] as const).map((e) => (
+            <button key={e} className={settings.engine === e ? 'active' : ''} disabled={e === 'browser' && !browserEngineSupported()} onClick={() => set({ engine: e })}>
+              {t(ENGINE_LABEL[e])}
+            </button>
+          ))}
+        </div>
+      </div>
+      <p className="set-hint">{hint[settings.engine]}</p>
+    </>
+  )
+}
+
+/** Terms no engine translates, and fixed translations per language (for the agent). */
+function GlossaryEditor({ t, info }: { t: T; info: Info }) {
+  const [glossary, setGlossary] = useState<Glossary | null>(null)
+  const [keep, setKeep] = useState('')
+  const [terms, setTerms] = useState<Record<string, string>>({})
+  useEffect(() => {
+    api.glossary().then((g) => {
+      setGlossary(g)
+      setKeep(g.keep.join(', '))
+      setTerms(Object.fromEntries(Object.entries(g.terms).map(([l, m]) => [l, Object.entries(m).map(([a, b]) => `${a} = ${b}`).join('\n')])))
+    })
+  }, [])
+  if (!glossary) return null
+  const save = (nextKeep = keep, nextTerms = terms) => {
+    const parsed = Object.fromEntries(
+      Object.entries(nextTerms).map(([l, text]) => [
+        l,
+        Object.fromEntries(
+          text
+            .split('\n')
+            .map((line) => line.split('='))
+            .filter((p) => p.length === 2 && p[0].trim() && p[1].trim())
+            .map(([a, b]) => [a.trim(), b.trim()]),
+        ),
+      ]),
+    )
+    api.saveGlossary({ keep: nextKeep.split(',').map((x) => x.trim()).filter(Boolean), terms: parsed }).then(setGlossary)
+  }
+  return (
+    <>
+      <div className="set-title">{t('settings.glossary')}</div>
+      <label className="set-row top">
+        <span className="set-label">{t('settings.glossaryKeep')}</span>
+        <textarea className="glossary-input" value={keep} placeholder="markode, skill, frontmatter" onChange={(e) => setKeep(e.target.value)} onBlur={() => save()} />
+      </label>
+      <p className="set-hint">{t('settings.glossaryKeepHint')}</p>
+      {info.langs.map((l) => (
+        <label key={l} className="set-row top">
+          <span className="set-label">{t('settings.glossaryTerms', { lang: info.langNames[l] ?? l })}</span>
+          <textarea className="glossary-input" value={terms[l] ?? ''} placeholder="proposal = …" onChange={(e) => setTerms({ ...terms, [l]: e.target.value })} onBlur={() => save()} />
+        </label>
+      ))}
+      {info.langs.length > 0 && <p className="set-hint">{t('settings.glossaryTermsHint')}</p>}
+    </>
+  )
+}
+
+/**
+ * The interface language: a built-in one, one the user's engine already translated, or a new one,
+ * translated now from English and kept in ~/.markode/.
+ */
+function UiLanguage({ t, settings, set, onUiStrings }: { t: T; settings: EditorSettings; set: (patch: Partial<EditorSettings>) => void; onUiStrings: () => void }) {
+  const [generated, setGenerated] = useState<Record<string, string>>({})
+  const [other, setOther] = useState(false)
+  const [name, setName] = useState('')
+  const [code, setCode] = useState('')
+  const [progress, setProgress] = useState<string | null>(null)
+  const engine = resolveEngine(settings.engine)
+  useEffect(() => {
+    api.uiLangs().then(setGenerated, () => {})
+  }, [])
+  const generate = async (lang: string, langName: string) => {
+    try {
+      setProgress(t('settings.uiLangGenerating', { done: 0, total: Object.keys(EN_STRINGS).length }))
+      const strings = await translateUi(engine, EN_STRINGS, lang, (done, total) => setProgress(t('settings.uiLangGenerating', { done, total })))
+      await api.saveUiStrings(lang, langName, strings)
+      setGenerated((g) => ({ ...g, [lang]: langName }))
+      setProgress(null)
+      setOther(false)
+      onUiStrings()
+      set({ uiLang: lang })
+    } catch (e) {
+      setProgress((e as Error).message)
+    }
+  }
+  const builtIn = (UI_LANGS as string[]).includes(settings.uiLang)
+  const validCode = /^[a-z]{2,3}(-[a-z0-9]{2,8})?$/i.test(code) && !(UI_LANGS as string[]).includes(code.toLowerCase())
+  return (
+    <>
+      <label className="set-row">
+        <span className="set-label">{t('settings.uiLang')}</span>
+        <select className="control" value={other ? OTHER : settings.uiLang} onChange={(e) => (e.target.value === OTHER ? setOther(true) : (setOther(false), set({ uiLang: e.target.value })))}>
+          {UI_LANGS.map((l) => (
+            <option key={l} value={l}>
+              {LANG_NAMES[l]}
+            </option>
+          ))}
+          {Object.entries(generated).map(([l, n]) => (
+            <option key={l} value={l}>
+              {n}
+            </option>
+          ))}
+          <option value={OTHER}>{t('settings.uiLangOther')}</option>
+        </select>
+        {!builtIn && !other && engine !== 'agent' && (
+          <button className="btn small" disabled={!!progress} onClick={() => generate(settings.uiLang, generated[settings.uiLang] ?? settings.uiLang)}>
+            {t('settings.uiLangRegenerate')}
+          </button>
+        )}
+      </label>
+      {other && engine === 'agent' && <p className="set-hint">{t('settings.uiLangNeedsEngine')}</p>}
+      {other && engine !== 'agent' && (
+        <div className="add-lang">
+          <input className="control" placeholder={t('settings.langName')} value={name} autoFocus onChange={(e) => setName(e.target.value)} />
+          <input className="control code" placeholder={t('settings.langCode')} value={code} maxLength={11} onChange={(e) => setCode(e.target.value)} />
+          <button className="btn small" disabled={!name.trim() || !validCode || !!progress} onClick={() => generate(code.toLowerCase(), name.trim())}>
+            {t('settings.uiLangGenerate')}
+          </button>
+        </div>
+      )}
+      {progress && <p className="set-hint">{progress}</p>}
+      <p className="set-hint">{t('settings.uiLangHint')}</p>
+    </>
+  )
+}
+
 function Slider({ label, value, min, max, step, unit, onChange }: { label: string; value: number; min: number; max: number; step: number; unit: string; onChange: (v: number) => void }) {
   return (
     <label className="set-row">
@@ -199,7 +353,7 @@ function Slider({ label, value, min, max, step, unit, onChange }: { label: strin
   )
 }
 
-export function Settings({ t, section: initialSection, theme, onTheme, info, settings, onSettings, onLanguages, pendingTranslations, onProposals, onFeature, onClose }: Props) {
+export function Settings({ t, section: initialSection, theme, onTheme, info, settings, onSettings, onLanguages, pendingTranslations, onProposals, onFeature, onUiStrings, onClose }: Props) {
   const [section, setSection] = useState(initialSection)
   const set = (patch: Partial<EditorSettings>) => onSettings({ ...settings, ...patch })
 
@@ -231,17 +385,7 @@ export function Settings({ t, section: initialSection, theme, onTheme, info, set
           {section === 'general' && (
             <section>
               <div className="set-title">{t('settings.general')}</div>
-              <label className="set-row">
-                <span className="set-label">{t('settings.uiLang')}</span>
-                <select className="control" value={settings.uiLang} onChange={(e) => set({ uiLang: e.target.value })}>
-                  {UI_LANGS.map((l) => (
-                    <option key={l} value={l}>
-                      {LANG_NAMES[l]}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <p className="set-hint">{t('settings.uiLangHint')}</p>
+              <UiLanguage t={t} settings={settings} set={set} onUiStrings={onUiStrings} />
               <div className="set-row">
                 <span className="set-label">{t('app.theme')}</span>
                 <div className="segmented">
@@ -259,7 +403,7 @@ export function Settings({ t, section: initialSection, theme, onTheme, info, set
             <section>
               <div className="set-title">
                 {t('settings.editor')}
-                <button className="btn small" onClick={() => onSettings({ ...DEFAULT_SETTINGS, uiLang: settings.uiLang })}>
+                <button className="btn small" onClick={() => onSettings({ ...DEFAULT_SETTINGS, uiLang: settings.uiLang, engine: settings.engine })}>
                   <RotateCcw size={12} /> {t('settings.reset')}
                 </button>
               </div>
@@ -340,11 +484,13 @@ export function Settings({ t, section: initialSection, theme, onTheme, info, set
                 </div>
               </div>
               <p className="set-hint">{t('settings.translationsHint')}</p>
-              {info.langs.length > 0 && pendingTranslations > 0 && (
+              <EngineSettings t={t} settings={settings} set={set} />
+              {resolveEngine(settings.engine) === 'agent' && info.langs.length > 0 && pendingTranslations > 0 && (
                 <div className="set-callout">
                   {t('settings.toTranslate', { n: pendingTranslations })} <CopyCommand command="/markode translate" t={t} />
                 </div>
               )}
+              <GlossaryEditor t={t} info={info} />
               </>
               )}
             </section>

@@ -113,8 +113,28 @@ agents; each user edits it and adds their own in the Rules tab:
 - Each user enables any number of **translation languages**: English, Spanish, French, Portuguese, German, Italian.
 - The language selector switches between the original and each translation: sidebar and documents follow it. Translations can be **edited**.
 - The **interface language** is a separate, personal setting (Settings → General), English by default.
-- The source file is never overwritten by the app directly from a translation.
-- Translation is done by the **AI through the skill** (no API key in the app).
+- The source file only changes from a translation after the user approves each change (see Sync flow).
+- Translation is done by a **translation engine**, chosen per user (Settings → Languages), none with an API key:
+
+| Engine | Where it runs | Notes |
+|---|---|---|
+| Browser | The markode tab (Chrome's built-in Translator API, Chrome/Edge 138+ desktop) | Offline once the language pair is downloaded; greyed out in browsers without it |
+| Agent | The AI through the skill (`/markode translate`) | As before, fed the same segments |
+
+- Default engine: the browser when available, otherwise the agent.
+- With the browser engine, markode translates **automatically in the background while it is open**:
+  what is missing or outdated on start, and again when a source file changes; only the changed segments
+  go to the engine. The markode tab drives it (`/api/translate/plan`, the engine,
+  `/api/translate/apply`). The top bar shows the progress, a failure (click to retry) and the one-time
+  model download a language pair needs (the browser only allows it after a click).
+- **Glossary** per project (`.markode/glossary.json`): terms never translated, or with a fixed translation
+  per language. Kept terms are protected for every engine; fixed translations only reach the agent (the
+  browser's translator takes no hints).
+- The interface comes in English, Spanish, French, Portuguese, German and Italian; any other language
+  (Settings → General → Other language…) is translated once from English by the browser engine and
+  kept in `~/.markode/ui-<lang>.json`. A string that loses a `{variable}` stays in English.
+- Language detection of the open doc uses the browser's Language Detector when it is ready (no download
+  for it), so a doc in any language is flagged; the sidebar badges use the stopword heuristic.
 - Files whose prose is not in the source language are flagged (badge + banner). `/markode translate` asks whether to convert them; "no" is remembered (`markode translate --keep`).
 
 ### Storage
@@ -124,6 +144,9 @@ agents; each user edits it and adds their own in the Rules tab:
 ```tree
 .markode/                  # hidden, git-ignored
   state.json               # hashes + sync status per file
+  glossary.json            # terms kept or with a fixed translation
+  cache/
+    es.json                # translated segments by hash
   i18n/
     es/
       CLAUDE.md
@@ -135,19 +158,50 @@ agents; each user edits it and adds their own in the Rules tab:
 - Init also offers to hide `.markode/` in the code editor (e.g. VS Code `files.exclude`), so the project only shows the English files.
 - The markode sidebar always shows the English tree; with a second language enabled, opening a file transparently loads its translation.
 
+### Segments
+
+A file is split into **segments**: heading, paragraph, list item, table cell, blockquote line. Only their
+prose goes to the engine. Frontmatter keys and `status`/`type` values, code blocks, `tree` and `mermaid`
+blocks, `<!-- ... -->` comments and markers, inline code and link targets are kept byte for byte, and the
+segments are joined back in the source's layout (`src/core/segments.ts`).
+
+Each translated segment is cached in `.markode/cache/<lang>.json` by the hash of its source text and the
+glossary entries it uses, so editing one paragraph re-translates one paragraph, the same text in two files
+is translated once, and a glossary change only invalidates the segments it touches (`src/core/translation.ts`).
+
+- An engine gets the prose with numbered placeholders (`{0}`) for the protected spans and the glossary's
+  kept terms; a translation that loses one is asked again once, then that segment stays in the source
+  language and the file stays `outdated`.
+- A translation the user edited (`pending-sync`, `conflict`) is never overwritten by an engine.
+- The glossary:
+
+```json
+{ "keep": ["markode", "skill"], "terms": { "es": { "proposal": "propuesta" } } }
+```
+
 ### Sync flow
 
 `state.json` keeps, per file, the hash of the English source and of the translation.
 
 | Detected change | Status | What the AI does on `/markode translate` |
 |---|---|---|
-| English changed | `outdated` | Re-translates into the second language |
-| Translation edited by the user | `pending-sync` | Asks; if approved, updates the English file, then refreshes the translations |
+| English changed | `outdated` | Re-translates the changed segments (a local engine does it on its own) |
+| Translation edited by the user | `pending-sync` | With the browser engine, **Bring my edits to the original** translates the edited segments back and shows each change; on approval the source is written (only those segments), the user's wording is kept as the cached translation, and the other languages are refreshed. If paragraphs, code or tables were added or removed, or the agent wrote that translation, the agent handles it |
 | Both changed | `conflict` | Asks with a proposed merge (English wins on contradictions) |
 | No translation yet | `missing` | Translates the file |
 
-- Translating only happens when the user asks for `/markode translate`; markode shows a "to translate"
-  counter in the top bar and in Settings, with a button that copies the command.
+- A **proposal answered in a translation**: "Done, send my answer" brings the answer to the source,
+  which is what `markode wait` and the agent read. The ticks, `status`/`updated` and the new thread
+  comments (as written, not translated) are copied by position (`src/core/answer.ts`); the source's
+  prose is untouched. If the translation's structure no longer matches the source, nothing is sent and
+  markode asks to answer in the source language.
+- Translation files are only deleted with their source doc. Removing a translation language or turning
+  the Translations module off keeps `.markode/i18n/<lang>/` and the segment cache, so turning them back
+  on brings the translations and the user's edits back as they were.
+- With the agent engine, translating only happens when the user asks for `/markode translate`; markode
+  shows a "to translate" counter in the top bar and in Settings, with a button that copies the command.
+  The agent gets the same segments (`markode translate --segments`) and writes them back with
+  `markode translate --apply`.
 - `/markode sync` is a different job: it keeps the docs consistent (answered proposals, phases vs tasks,
   projects table, broken links; `markode check`), at the start and end of each session.
 
@@ -164,7 +218,8 @@ Global per user (`~/.markode/settings.json`), opened from the gear in the top ba
 | Line width | Full / Readable (820 px) |
 
 The same panel holds the project's modules (Features: what each does and writes, with a switch), the
-project's source language and the user's translation languages (shown with the AI agent and Translations on).
+project's source language, the user's translation languages and the translation engine (`engine`:
+auto / browser / agent), shown with the AI agent and Translations on.
 
 ## 6. Layout
 
@@ -284,14 +339,14 @@ Phases are created over time as the project evolves; no fixed structure up front
 |---|---|
 | D1 | Frontmatter keys and all `.md` files in English |
 | D2 | Tool name `markode`; installed with pnpm |
-| D3 | Translation done by the AI via the skill (`/markode translate`), no API key |
-| D4 | Translations in `.markode/i18n/`, hidden and git-ignored |
+| D3 | Translation by the browser's Translator API or the AI via the skill, no API key (a local LLM through Ollama was dropped: too slow); Markdown split into cached segments, only prose translated |
+| D4 | Translations in `.markode/i18n/`, hidden and git-ignored; segment cache and glossary in `.markode/` too |
 | D5 | Base `/docs`: `architecture.md`, `rules.md`, `tasks.md`, `decisions.md`, `phases/` |
 | D6 | Palette: dark by default + light theme; one hue per element type (CSS tokens in `web/src/styles.css`) |
 | D7 | Changes view: `git diff` against HEAD grouped by Markdown section |
 | D8 | Dashboard: phase cards (`type: phase`) with checkbox progress + documents grouped by `type` |
 | D10 | Source language configurable per project (managed section of the main doc); translations per user, multiple allowed |
-| D11 | Language detection: stopword heuristic, prose only; files under 25 words are not flagged |
+| D11 | Language detection: Chrome's Language Detector API when available, otherwise the stopword heuristic; prose only; files under 25 words are not flagged |
 | D12 | Sidebar search: one box with Names / Content modes; content search and replace run on the server (`/api/search`, `/api/replace`) |
 | D9 | Stack: Node CLI (`src/`) + React/Vite + CodeMirror 6 web UI (`web/`), local server on port 4319 |
 

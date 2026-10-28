@@ -103,14 +103,22 @@ at the start of a session (answered proposals first), after editing `.md` files 
 ## Translations (`/markode translate`)
 
 Only when the user asks for `/markode translate` (markode shows a button to copy it when translations
-fall behind). Never translate as a side effect of other work, and never change a source file without
-the user's approval.
+fall behind). With the browser engine, markode translates by itself; the agent is still the one for
+`conflict`, for files not in the source language, and for edited translations markode can't map back
+(paragraphs added or removed). Never translate as a side effect of other work, and never change a source
+file without the user's approval.
 
 1. `markode translate --status --json`. It returns
    `{ sourceLang, langs, names, foreign: [{ path, detected }], files: [{ path, lang, status, translation }] }`.
    `names` maps each language code to its name (`ja` → `Japanese`): translate into that language, also for
    codes the user added by hand.
-2. `missing` or `outdated`: translate the source `path` into `lang` and write it to `translation`.
+2. `missing` or `outdated`: run `markode translate --segments [--lang <lang>]`. It returns
+   `{ sourceLang, names, files: [{ path, lang, pending: [{ key, text, terms }] }] }`: only the prose that
+   has no cached translation (code, links, frontmatter keys and markers are kept by markode). Translate
+   each `text` into `names[lang]`, keeping every `{0}`-style placeholder exactly once and using `terms`
+   (fixed translations from the glossary). Write `{ "<lang>": { "<key>": "<translation>" } }` to a
+   temporary file and run `markode translate --apply <file>`: it writes the translation files and marks
+   them in sync. Translate again any segment it reports as having lost a placeholder.
 3. **Changes that would touch a source file: ask first.** In one message, list each file with a one-line
    summary of what would change, and apply only what the user approves:
    - `pending-sync`: the user edited the translation; their changes would go into the source `path`
@@ -120,7 +128,7 @@ the user's approval.
      wants to keep: `markode translate --keep <path> [<path>...]`.
    After applying, regenerate that file's translations in every language. What the user doesn't approve
    stays as it is (still `pending-sync` or `conflict`).
-4. `markode translate --mark --lang <lang> <path> [<path>...]` for every translation you wrote (without
-   `--lang` it marks every enabled language).
+4. `markode translate --mark --lang <lang> <path> [<path>...]` for every translation you wrote by hand
+   in step 3 (without `--lang` it marks every enabled language); `--apply` marks its own.
 
 Translation rules: keep frontmatter keys, code blocks, `tree` and `mermaid` identifiers, link targets, table structure and the `<!-- ... -->` markers unchanged; translate only human text (including frontmatter values like titles, but not `status`/`type` values).

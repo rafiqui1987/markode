@@ -602,3 +602,13 @@ button.pill:hover { filter: brightness(1.15); }
 /* Matches: all of them, and the selected one stronger. */
 .cm-editor .cm-content .cm-searchMatch { background: var(--search-match); outline: 1px solid var(--search-match-border); border-radius: 2px; }
 .cm-editor .cm-content .cm-searchMatch.cm-searchMatch-selected { background: var(--search-current); outline-color: var(--search-current-border); }
+
+/* Edited translation → original: each change as before / after. */
+.back-sync { max-height: 70vh; overflow: auto; }
+.back-path { font-size: 12px; color: var(--muted); }
+.back-change { display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px; }
+.back-change del { color: var(--muted); text-decoration: line-through; }
+.back-change ins { text-decoration: none; color: var(--text); }
+.back-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.glossary-input { width: 100%; box-sizing: border-box; min-height: 64px; resize: vertical; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; color: var(--text); font-family: var(--font-mono); font-size: 12px; outline: none; }
+.glossary-input:focus { border-color: var(--accent); }

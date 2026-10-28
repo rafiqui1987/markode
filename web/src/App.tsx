@@ -9,7 +9,9 @@ import { applySettings, DEFAULT_SETTINGS, Settings, type SettingsSection, type T
 import { showMenu } from './editor/widgets'
 import { Sidebar } from './components/Sidebar'
 import { Skills } from './components/Skills'
-import { makeT } from './i18n'
+import { BackSync } from './components/BackSync'
+import { makeT, UI_LANGS } from './i18n'
+import { detectLanguage, resolveEngine, useAutoTranslate } from './translate'
 
 type View = 'editor' | 'dashboard' | 'changes' | 'rules' | 'skills'
 
@@ -130,11 +132,31 @@ export function App() {
   const sourceLang = info?.sourceLang ?? 'en'
   const viewLang: string = storedLang && info?.langs.includes(storedLang) ? storedLang : sourceLang
   const nameOf = (code: string) => info?.langNames[code] ?? LANG_NAMES[code as Lang] ?? code
-  // The menus' language is a setting of its own, independent of the docs' one.
-  const t = useMemo(() => makeT(settings.uiLang), [settings.uiLang])
+  // The menus' language is a setting of its own, independent of the docs' one. One without a built-in
+  // dictionary uses the strings the user's engine translated (Settings → General).
+  const [uiStrings, setUiStrings] = useState<Record<string, string> | null>(null)
+  const [uiTick, setUiTick] = useState(0)
+  useEffect(() => {
+    if ((UI_LANGS as string[]).includes(settings.uiLang)) return setUiStrings(null)
+    api.uiStrings(settings.uiLang).then((u) => setUiStrings(u.strings), () => setUiStrings(null))
+  }, [settings.uiLang, uiTick])
+  const t = useMemo(() => makeT(settings.uiLang, uiStrings), [settings.uiLang, uiStrings])
+  // With the browser engine, translations happen here, while markode is open.
+  const engine = resolveEngine(settings.engine)
+  const translating = !!info?.features.translations && info.langs.length > 0
+  const auto = useAutoTranslate(translating, engine, () => {
+    refreshTreeRef.current()
+    setTick((n) => n + 1)
+  })
+  const autoRunRef = useRef(auto.run)
+  autoRunRef.current = auto.run
+  const [backOpen, setBackOpen] = useState(false)
+  /** The open doc's language by the browser's detector, when it has one (else the server's heuristic). */
+  const [detected, setDetected] = useState<{ path: string; lang: string | null } | null>(null)
   const viewLangRef = useRef(viewLang)
   viewLangRef.current = viewLang
   const refreshTree = useCallback(() => api.tree(viewLangRef.current).then(setData), [])
+  const refreshTreeRef = useRef(refreshTree)
   const selectedRef = useRef(selected)
   selectedRef.current = selected
 
@@ -168,6 +190,7 @@ export function App() {
 
   useEffect(() => {
     let timer: number | undefined
+    let translateTimer: number | undefined
     const refreshAll = () => {
       refreshTree()
       setTick((n) => n + 1)
@@ -178,6 +201,11 @@ export function App() {
         openRef.current(e.path)
         window.focus()
         return
+      }
+      // A source doc changed: its translations are behind (a translation's own changes are not).
+      if (!e.lang && e.path.toLowerCase().endsWith('.md') && !e.path.startsWith('.markode/') && e.event !== 'unlink') {
+        window.clearTimeout(translateTimer)
+        translateTimer = window.setTimeout(() => autoRunRef.current(), 1500)
       }
       // Sync state (state.json) changes the open file's status without touching its content.
       if (e.path === selectedRef.current || e.path.startsWith('.markode/')) setFileTick((n) => n + 1)
@@ -274,6 +302,19 @@ export function App() {
       .catch(() => false)
     editorCommands.current?.setField('status', 'answered')
     editorCommands.current?.setField('updated', today())
+    // Answered in a translation: the answer has to reach the source, which is what the agent reads.
+    if (viewLang !== sourceLang) {
+      await editorCommands.current?.flush()
+      const failed = await api.carryAnswer(path, viewLang).then(
+        () => null,
+        (e: Error) => e.message,
+      )
+      if (failed) {
+        editorCommands.current?.setField('status', 'open')
+        alert(t('proposal.carryFailed', { error: failed, lang: LANG_NAMES[sourceLang] ?? sourceLang }))
+        return
+      }
+    }
     if (!waiting) navigator.clipboard?.writeText(t('proposal.message', { path })).catch(() => {})
     setListening(waiting)
     setAnswered(path)
@@ -316,6 +357,30 @@ export function App() {
   }
 
   const status: SyncStatus | null = file?.status ?? null
+  // Checked by the browser's detector when it has one: it knows many more languages than the heuristic.
+  useEffect(() => {
+    if (!file || file.target !== 'source' || viewLang !== sourceLang) return
+    let live = true
+    detectLanguage(file.content).then((lang) => live && setDetected({ path: file.path, lang }))
+    return () => {
+      live = false
+    }
+  }, [file?.path, file?.target, viewLang, sourceLang])
+  const foreignLang: string | null = !selected
+    ? null
+    : detected?.path === selected && detected.lang
+      ? detected.lang === sourceLang
+        ? null
+        : detected.lang
+      : (data.foreign[selected] ?? null)
+  const langLabel = (code: string) => {
+    if (LANG_NAMES[code as Lang]) return LANG_NAMES[code as Lang]
+    try {
+      return new Intl.DisplayNames([settings.uiLang], { type: 'language' }).of(code) ?? code
+    } catch {
+      return code
+    }
+  }
   const crumbs = selected?.split('/') ?? []
   const commentAs = info?.features.agent ? (info.author ?? t('comment.me')) : null
   const layoutKey = `${settings.font}|${settings.size}|${settings.lineHeight}|${settings.padding}|${settings.width}`
@@ -350,7 +415,22 @@ export function App() {
           ))}
         </nav>
         <div className="spacer" />
-        {pendingTranslations > 0 && (
+        {engine !== 'agent' && auto.state.running && (
+          <span className="pill" title={auto.state.current}>
+            {t('translate.running', { done: auto.state.done, total: auto.state.total })}
+          </span>
+        )}
+        {engine !== 'agent' && auto.state.needsDownload && (
+          <button className="pill warn" title={t('translate.downloadHint')} onClick={() => auto.download(auto.state.needsDownload!.from, auto.state.needsDownload!.to)}>
+            {t('translate.download', { pair: `${auto.state.needsDownload.from} → ${auto.state.needsDownload.to}` })}
+          </button>
+        )}
+        {engine !== 'agent' && auto.state.error && (
+          <button className="pill warn" title={t('translate.retry', { error: auto.state.error })} onClick={() => auto.run()}>
+            {t('translate.error')}
+          </button>
+        )}
+        {engine === 'agent' && pendingTranslations > 0 && (
           <button className="pill warn" title={t('sync.copyCommand')} onClick={copyTranslate}>
             {copiedTranslate ? <Check size={12} /> : <Copy size={12} />} {copiedTranslate ? t('app.copied') : t('sync.pendingCount', { n: pendingTranslations })}
           </button>
@@ -468,12 +548,18 @@ export function App() {
               )}
               {viewLang !== sourceLang && status && status !== 'synced' && (
                 <div className={`banner sync-${status}`}>
-                  <span className={`dot sync-${status}`} /> {t(`sync.${status}`)} · {t('sync.hint')}
+                  <span className={`dot sync-${status}`} /> {t(`sync.${status}`)} · {engine !== 'agent' && (status === 'missing' || status === 'outdated') ? t('sync.hintAuto') : engine !== 'agent' && status === 'pending-sync' ? '' : t('sync.hint')}
+                  {engine !== 'agent' && status === 'pending-sync' && (
+                    <button className="btn" onClick={() => setBackOpen(true)}>
+                      {t('back.review')}
+                    </button>
+                  )}
                 </div>
               )}
-              {viewLang === sourceLang && data.foreign[selected] && (
+              {viewLang === sourceLang && foreignLang && (
                 <div className="banner foreign">
-                  {t('foreign.banner', { lang: LANG_NAMES[data.foreign[selected]], source: LANG_NAMES[sourceLang] })}
+                  {t('foreign.banner', { lang: langLabel(foreignLang), source: LANG_NAMES[sourceLang] })}
+                  {data.foreign[selected] && (
                   <button
                     className="btn"
                     onClick={async () => {
@@ -483,6 +569,7 @@ export function App() {
                   >
                     {t('foreign.keep', { lang: LANG_NAMES[data.foreign[selected]] })}
                   </button>
+                  )}
                 </div>
               )}
               <Editor
@@ -531,7 +618,22 @@ export function App() {
         {current === 'skills' && <Skills t={t} tick={tick} look={{ layoutKey, wrap: settings.wrap, theme: resolvedTheme }} />}
       </main>
 
-      {settingsOpen && info && <Settings t={t} section={settingsOpen} pendingTranslations={pendingTranslations} theme={theme} onTheme={setTheme} info={info} settings={settings} onSettings={changeSettings} onLanguages={changeLanguages} onProposals={changeProposals} onFeature={changeFeature} onClose={() => setSettingsOpen(null)} />}
+      {backOpen && selected && viewLang !== sourceLang && (
+        <BackSync
+          t={t}
+          path={selected}
+          lang={viewLang}
+          engine={engine}
+          onClose={() => setBackOpen(false)}
+          onApplied={() => {
+            setBackOpen(false)
+            refreshTree()
+            setFileTick((n) => n + 1)
+            auto.run()
+          }}
+        />
+      )}
+      {settingsOpen && info && <Settings onUiStrings={() => setUiTick((n) => n + 1)} t={t} section={settingsOpen} pendingTranslations={pendingTranslations} theme={theme} onTheme={setTheme} info={info} settings={settings} onSettings={changeSettings} onLanguages={changeLanguages} onProposals={changeProposals} onFeature={changeFeature} onClose={() => setSettingsOpen(null)} />}
     </div>
   )
 }

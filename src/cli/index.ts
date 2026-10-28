@@ -12,7 +12,7 @@ import { CURRENT_VERSION, installCommand, installer, isNewer, latestVersion, run
 import { answerSummary, waitForAnswer } from '../core/wait.js'
 import { startServer } from '../server/index.js'
 import { askFeatures, type InitPlan, runInit, runSetup } from './init.js'
-import { runTranslate } from './translate.js'
+import { runSegments, runTranslate } from './translate.js'
 
 const HELP = `markode — visual editor for your project's Markdown
 
@@ -36,8 +36,11 @@ Usage
   markode update [--check] install the latest version now, without the day npm/pnpm wait for new releases
   markode update --pnpm|--npm  the same, choosing the package manager to install it with
 
+
 For the agent's /markode translate:
   markode translate --status [--json]                    translations + files not in the source language
+  markode translate --segments [--lang xx] [<path...>]   the segments still to translate (JSON)
+  markode translate --apply <results.json>               write translations from { "<lang>": { "<key>": "<text>" } }
   markode translate --mark [--lang xx] <path...>|--all   record translations as in sync
   markode translate --keep <path...>                     keep files in their current language
 
@@ -70,6 +73,7 @@ async function main() {
   // `sync --status|--mark|--keep` is the name older skills use for the translation commands.
   const translation = flag('--status') || flag('--mark') || flag('--keep')
   if ((command === 'sync' || command === 'translate') && translation) return sync()
+  if (command === 'translate' && (flag('--segments') || option('--apply'))) return runSegments(root, args, option, flag)
   if (command === 'translate' || flag('--translate')) return runTranslate(root)
   // What an agent runs at the start of a session: it also brings an older skill up to this version, so
   // commands added since (e.g. `/markode` opening the editor) work without starting the editor first.

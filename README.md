@@ -104,7 +104,7 @@ Turning one off removes only what markode added; your docs, tasks, proposals and
 | **Working rules** | Rules the agent follows in this project, chosen in the Rules tab. Needs the AI agent. | Inside the "Working rules" section |
 | **Proposals** | The agent answers big questions with a doc you answer by ticking options and commenting. Needs the AI agent. | The `markode-proposals` skill, a "Proposals" section in the main doc |
 | **Live changes** | Claude Code hears about your edits and comments while it works. Needs the AI agent. | Personal hooks in `.claude/settings.local.json` |
-| **Translations** | Read and edit the docs in your language; the agent translates them. Needs the AI agent. | Only `.markode/` (personal) |
+| **Translations** | Read and edit the docs in your language, translated by your browser or the agent. Needs the AI agent. | Only `.markode/` (personal) |
 | **Dashboard and tasks** | A Dashboard tab with docs, proposals, phases and tasks; with the AI agent, also the structure for them (the markode method). | `docs/`, the `markode-*` method skills, a "Workflow" section in the main doc |
 | **Skills** | A tab to browse and edit your agents' skills and add them to the project. | Nothing |
 | **Hide in VS Code** | Hides `.markode/` from the VS Code explorer. | `.vscode/settings.json` |
@@ -178,21 +178,29 @@ don't have to choose:
 
 - Add a language to review the docs in, from **Settings → Document languages** or with
   `markode translate`: Spanish, French, Portuguese, German or Italian, or **type any other** (Japanese,
-  Dutch…). Then ask your agent for **`/markode translate`** (markode has a button to copy it), and
-  markode shows **every doc in that language**. Read the architecture, tick tasks, write notes and fix
-  a rule, all in your language.
+  Dutch…). markode shows **every doc in that language**. Read the architecture, tick tasks, write
+  notes and fix a rule, all in your language.
+- Pick who translates, in the same place:
+  - **Browser** (the default in Chrome and Edge 138+): the browser's built-in translator, on your
+    computer and offline once each language is downloaded. markode translates **by itself while it is
+    open**, and only the paragraphs that changed.
+  - **AI agent**: ask for **`/markode translate`** (markode has a button to copy it).
+- Code blocks, diagrams, links, frontmatter keys and markode's markers are never sent to the engine,
+  so a translation never breaks the Markdown. A **glossary** keeps names untranslated and fixes the
+  translation of your terms.
 - The files in the repository **stay in one source language**, detected from your docs on setup, so
   the agent and the rest of the team keep reading one consistent version.
-- Your edits are kept as a translation until you ask for `/markode translate` again. Before changing
-  a source file, the agent lists what would change and applies only what you approve. The top bar
-  shows how many docs are behind, and copies the command when clicked.
+- Your edits are kept as a translation. With the browser engine, **Bring my edits to the original**
+  translates the paragraphs you edited back and shows each change; the source file changes only when
+  you approve it. With the agent, `/markode translate` lists what would change and applies only what
+  you approve.
 - Translating is always on purpose: it never happens as a side effect of other work.
 - The menus don't depend on the docs' language: pick English, Spanish, French, Portuguese, German or
-  Italian in **Settings → General**.
+  Italian in **Settings → General**, or any other language, translated once by your browser.
 
 Example: you open `docs/tasks/T-004-login.md` in Spanish, add an acceptance criterion and tick two
-others. After `/markode translate` and your OK, the English file has the new criterion and the ticks,
-and the agent works from it.
+others. After you approve your edits, the English file has the new criterion and the ticks, and the agent
+works from it.
 
 ### 7. A method to plan and follow the work
 
@@ -448,6 +456,8 @@ markode changes --start                               # a new session: what happ
 markode translate --status [--json]                   # translations + files not in the source language
 markode translate --mark [--lang xx] <path...>|--all  # record translations as in sync
 markode translate --keep <path...>                    # keep files in their current language
+markode translate --segments [--lang xx]              # the segments still to translate (JSON)
+markode translate --apply <results.json>              # write translations: { "<lang>": { "<key>": "<text>" } }
 ```
 
 ## Uninstall

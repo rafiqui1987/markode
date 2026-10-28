@@ -200,14 +200,31 @@ export interface EditorSettings {
   wrap: boolean
   /** Language of markode' own menus; independent of the language the docs are written in. */
   uiLang: string
+  /** Translation engine; `auto` is the browser's when it has one, otherwise the agent. */
+  engine: TranslationEngine
 }
 
-export const DEFAULT_SETTINGS: EditorSettings = { font: 'inter', size: 15, lineHeight: 1.65, padding: 28, width: 'full', wrap: true, uiLang: 'en' }
+export type TranslationEngine = 'auto' | 'browser' | 'agent'
+export const ENGINES: TranslationEngine[] = ['auto', 'browser', 'agent']
+
+export const DEFAULT_SETTINGS: EditorSettings = {
+  font: 'inter',
+  size: 15,
+  lineHeight: 1.65,
+  padding: 28,
+  width: 'full',
+  wrap: true,
+  uiLang: 'en',
+  engine: 'auto',
+}
 const settingsFile = () => path.join(GLOBAL_DIR, 'settings.json')
 
 export function readSettings(): EditorSettings {
   try {
-    return { ...DEFAULT_SETTINGS, ...JSON.parse(fs.readFileSync(settingsFile(), 'utf8')) }
+    const s: EditorSettings = { ...DEFAULT_SETTINGS, ...JSON.parse(fs.readFileSync(settingsFile(), 'utf8')) }
+    // A value edited by hand that is not an engine falls back to the default.
+    if (!ENGINES.includes(s.engine)) s.engine = DEFAULT_SETTINGS.engine
+    return s
   } catch {
     return { ...DEFAULT_SETTINGS }
   }
@@ -215,6 +232,8 @@ export function readSettings(): EditorSettings {
 
 export function writeSettings(patch: Partial<EditorSettings>): EditorSettings {
   const next = { ...readSettings(), ...patch }
+  if (!ENGINES.includes(next.engine)) next.engine = DEFAULT_SETTINGS.engine
+  if (!isLangCode(next.uiLang)) next.uiLang = DEFAULT_SETTINGS.uiLang
   fs.mkdirSync(GLOBAL_DIR, { recursive: true })
   fs.writeFileSync(settingsFile(), JSON.stringify(next, null, 2) + '\n')
   return next
